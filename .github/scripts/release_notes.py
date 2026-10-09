@@ -72,7 +72,7 @@ def main():
 
     out = []
     out.append("## Installing")
-    out.append("1. Download **K-Maxing.zip** below.")
+    out.append("1. Download the **K-Maxing** zip below.")
     out.append("2. Unzip it and put the `K-Maxing` folder in your WoW: Forever `Interface\\AddOns` folder.")
     out.append("3. Restart the game, then type `/kmax` to open the options.")
     out.append("")

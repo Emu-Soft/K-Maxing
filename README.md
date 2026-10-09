@@ -31,7 +31,7 @@ From then on, WowUp shows an update whenever a new version is released.
 
 ### Manually
 
-1. Download **K-Maxing.zip** from the [latest release](../../releases/latest).
+1. Download the **K-Maxing** zip from the [latest release](../../releases/latest).
 2. Unzip it. You'll get a folder called `K-Maxing`.
 3. Put that folder in your WoW: Forever `Interface\AddOns` folder. The folder name must stay exactly `K-Maxing`.
 4. Restart the game (a `/reload` isn't enough the first time).

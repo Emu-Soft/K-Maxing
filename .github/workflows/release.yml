@@ -62,7 +62,7 @@ jobs:
         run: |
           mkdir -p build
           cp -r K-Maxing build/
-          (cd build && zip -qr ../K-Maxing.zip K-Maxing)
+          (cd build && zip -qr "../K-Maxing-${{ steps.version.outputs.version }}.zip" K-Maxing)
 
       # WowUp reads release.json to know which game clients the zip is for;
       # without it, it warns "unable to verify ... compatible". Forever is
@@ -83,7 +83,7 @@ jobs:
           data = {"releases": [{
               "name": "K-Maxing",
               "version": version,
-              "filename": "K-Maxing.zip",
+              "filename": f"K-Maxing-{version}.zip",
               "nolib": False,
               "metadata": [{"flavor": f, "interface": iface} for f in flavors],
           }]}
@@ -96,7 +96,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           v="${{ steps.version.outputs.version }}"
-          gh release create "v$v" K-Maxing.zip release.json \
+          gh release create "v$v" "K-Maxing-$v.zip" release.json \
             --title "K-Maxing $v" \
             --notes-file release-notes.md \
             --target "${{ github.sha }}" \
