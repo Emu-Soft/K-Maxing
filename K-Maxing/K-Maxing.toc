@@ -2,7 +2,7 @@
 ## Title: K-Maxing
 ## Notes: Everyone wants Balenciaga. It is not given to all.
 ## Author: [EmuSoft]
-## Version: 1.0
+## Version: 1.0.1
 ## Category: K-Mods
 ## IconTexture: Interface\AddOns\K-Maxing\Media\AddonIcon
 ## SavedVariables: BalenciagaMaxingDB
