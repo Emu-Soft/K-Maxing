@@ -13,3 +13,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lua5.1
       - name: Steal banner simulation
         run: lua5.1 tests/steal_sim.lua K-Maxing/Maxing_Core.lua
+      - name: Dungeon lockdown simulation
+        run: lua5.1 tests/lockdown_sim.lua K-Maxing/Maxing_Core.lua

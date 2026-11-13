@@ -62,15 +62,29 @@ elseif RegisterAddonMessagePrefix then
 	RegisterAddonMessagePrefix(COMM_PREFIX)
 end
 
+-- Returns true only if the message went out. In a dungeon lockdown the
+-- client refuses addon messages (with a result code, or an error), and that
+-- must never break the caller.
 local function SendComm(message)
 	local sendFunc = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or SendAddonMessage
-	if not sendFunc then return end
+	if not sendFunc then return false end
 
+	local channel
 	if IsInRaid and IsInRaid() then
-		sendFunc(COMM_PREFIX, message, "RAID")
+		channel = "RAID"
 	elseif (IsInGroup and IsInGroup()) or (GetNumPartyMembers and GetNumPartyMembers() > 0) then
-		sendFunc(COMM_PREFIX, message, "PARTY")
+		channel = "PARTY"
+	else
+		return false
 	end
+	local ok, result = pcall(sendFunc, COMM_PREFIX, message, channel)
+	if not ok then return false end
+	if issecretvalue and issecretvalue(result) then return true end
+	local codes = Enum and Enum.SendAddonMessageResult
+	if type(result) == "number" and codes and codes.Success ~= nil then
+		return result == codes.Success
+	end
+	return result ~= false
 end
 
 local function BroadcastPresence()
@@ -82,14 +96,35 @@ end
 -- (the meter's isLocalPlayer flag stays readable). So whoever takes #1 sends
 -- "TOP" to the group, and the player who lost it reads the thief's name from
 -- that message instead of from the meter.
-local TOP_CLAIM_WINDOW = 5 -- seconds a claim stays usable
+--
+-- In a dungeon lockdown the message can't go out. Then the claim waits and
+-- is sent as soon as the client allows, saying how long ago #1 was taken
+-- ("TOP:12.5"), and the player who lost #1 shows the banner at that point.
+local TOP_CLAIM_WINDOW = 5 -- a claim must come from at most this long before we lost #1
 local TOP_CLAIM_SLACK = 1 -- the two meters can disagree for about this long
+local TOP_CLAIM_GIVE_UP = 600 -- stop retrying a claim after this long
+local LATE_CLAIM_AFTER_COMBAT = 30 -- how long after combat a late claim still counts
 
+local pendingClaimAt = nil -- when we took #1, until the claim gets out
 local lastTopClaimName, lastTopClaimTime = nil, 0
 local lastSeenTopTime = 0 -- last poll that saw us at #1
+local pendingSteal = nil -- set when we lost #1 to a hidden name: { lostAt, seenTop, expiresAt }
 
-local function RecordTopClaim(name)
-	lastTopClaimName, lastTopClaimTime = name, GetTime()
+-- Whether a claim of #1 made at claimTime explains losing #1 at lostAt.
+local function ClaimFits(claimTime, seenTop, lostAt)
+	return claimTime >= seenTop - TOP_CLAIM_SLACK
+		and claimTime >= lostAt - TOP_CLAIM_WINDOW
+		and claimTime <= lostAt + TOP_CLAIM_SLACK
+end
+
+local function SendPendingClaim()
+	local ago = GetTime() - pendingClaimAt
+	if ago > TOP_CLAIM_GIVE_UP then
+		pendingClaimAt = nil
+		return
+	end
+	local message = ago < POLL_INTERVAL and "TOP" or string.format("TOP:%.1f", ago)
+	if SendComm(message) then pendingClaimAt = nil end
 end
 
 -- The K-Maxing user who claimed #1 since we were last seen there, if any.
@@ -97,9 +132,7 @@ local function TakeRecentTopClaimer()
 	local name = lastTopClaimName
 	if not name then return nil end
 	lastTopClaimName = nil
-	local now = GetTime()
-	if now - lastTopClaimTime > TOP_CLAIM_WINDOW then return nil end
-	if lastTopClaimTime < lastSeenTopTime - TOP_CLAIM_SLACK then return nil end
+	if not ClaimFits(lastTopClaimTime, lastSeenTopTime, GetTime()) then return nil end
 	return name
 end
 
@@ -880,6 +913,7 @@ local function OnBecameTop()
 	stolenTextFrame:Hide()
 
 	isCurrentlyTop = true
+	pendingSteal = nil
 	topSince = GetTime()
 	frozenTime = nil
 	colorTimer = 0
@@ -926,10 +960,12 @@ local function OnLostTop(newTopName)
 
 	-- In combat the new top player's name is a SECRET string: it can't be
 	-- used as a table key (that errors). Then the thief is whoever told us
-	-- they took #1 (see TakeRecentTopClaimer). Out of combat the meter's own
-	-- name is used as before.
+	-- they took #1 (see TakeRecentTopClaimer), or, if their message is held
+	-- back by a lockdown, whoever tells us later (see OnTopClaim). Out of
+	-- combat the meter's own name is used as before.
+	local hidden = newTopName ~= nil and issecretvalue and issecretvalue(newTopName)
 	local thief
-	if newTopName ~= nil and not (issecretvalue and issecretvalue(newTopName)) then
+	if newTopName ~= nil and not hidden then
 		thief = balenciagaUsers[newTopName] and newTopName
 		lastTopClaimName = nil
 	else
@@ -938,7 +974,26 @@ local function OnLostTop(newTopName)
 	if wasTop and thief then
 		TriggerBalenciagaStolen(thief)
 	else
+		if wasTop and hidden then
+			pendingSteal = { lostAt = GetTime(), seenTop = lastSeenTopTime }
+		end
 		StartFadeOut(FADE_OUT_DURATION)
+	end
+end
+
+-- Another K-Maxing user says they took #1 at claimTime.
+local function OnTopClaim(name, claimTime)
+	lastTopClaimName, lastTopClaimTime = name, claimTime
+	local steal = pendingSteal
+	if not steal or isCurrentlyTop then return end
+	if steal.expiresAt and GetTime() > steal.expiresAt then
+		pendingSteal = nil
+		return
+	end
+	if ClaimFits(claimTime, steal.seenTop, steal.lostAt) then
+		pendingSteal = nil
+		lastTopClaimName = nil
+		TriggerBalenciagaStolen(name)
 	end
 end
 
@@ -1114,9 +1169,11 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 		combatStartTime = GetTime()
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		combatStartTime = nil
+		if pendingSteal then pendingSteal.expiresAt = GetTime() + LATE_CLAIM_AFTER_COMBAT end
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		local inInstance, instanceType = IsInInstance()
 		inDungeon = inInstance and instanceType == "party"
+		pendingSteal = nil
 
 		if isCurrentlyTop then
 			PlayMusic(LocalMusicPath())
@@ -1134,11 +1191,12 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 		elseif msg == "PONG" then
 			local senderShort = (sender:match("([^-]+)")) or sender
 			balenciagaUsers[senderShort] = true
-		elseif msg == "TOP" then
+		elseif msg == "TOP" or msg:find("^TOP:") then
 			local senderShort = (sender:match("([^-]+)")) or sender
 			if senderShort ~= UnitName("player") then
 				balenciagaUsers[senderShort] = true
-				RecordTopClaim(senderShort)
+				local ago = tonumber(msg:match("^TOP:([%d.]+)$")) or 0
+				OnTopClaim(senderShort, GetTime() - ago)
 			end
 		end
 	end
@@ -1157,6 +1215,8 @@ ticker:SetScript("OnUpdate", function(self, elapsed)
 
 	if testModeActive or isUnlocked then return end
 
+	if pendingClaimAt then SendPendingClaim() end
+
 	if not inDungeon then
 		wasPollTop = false
 		if isCurrentlyTop then OnLostTop(nil) end
@@ -1166,7 +1226,10 @@ ticker:SetScript("OnUpdate", function(self, elapsed)
 	local amTop, topPlayerName = AmITopDamage()
 
 	-- Tell other K-Maxing users the moment we take #1, so they can name us.
-	if amTop and not wasPollTop then SendComm("TOP") end
+	if amTop and not wasPollTop then
+		pendingClaimAt = GetTime()
+		SendPendingClaim()
+	end
 	wasPollTop = amTop
 
 	if amTop then
