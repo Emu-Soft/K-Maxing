@@ -3,8 +3,8 @@
 -- a Lua error), arrive late, or come from a hidden sender. Checks that the
 -- #1 display still works, that the banner names a K-Maxing thief from the
 -- meter during the fight (the class column says they run K-Maxing), and
--- that when the meter can't settle it, a K-Maxing claim names them as soon
--- as it gets through, never naming the wrong player.
+-- that when the meter can't settle it, a K-Maxing claim names them if it
+-- gets through before the fight ends, never naming the wrong player.
 --
 --   lua5.1 tests/lockdown_sim.lua [path to Maxing_Core.lua]
 
@@ -68,7 +68,7 @@ print("-- the class can't settle it: a K-Maxing claim names the thief")
 do
 	local world, kain, _, inCombat = Pull({ lockdown = InCombat, secretClass = true }, "Emu")
 	t.Check(inCombat == nil, "hidden class, lockdown: nothing during the fight")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "hidden class, lockdown: Kain sees Emu named once combat ends")
+	t.Check(Rig.StolenText(kain) == nil, "hidden class, lockdown: no banner after the fight either")
 	NoErrors(world, "hidden class")
 end
 
@@ -85,23 +85,23 @@ end
 do
 	local world, kain, _, inCombat = Pull(NoNames({ lockdown = InCombat }), "Emu")
 	t.Check(inCombat == nil, "no names, refused: nothing during the fight (nothing can get through)")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names, refused: Kain sees Emu named once combat ends")
+	t.Check(Rig.StolenText(kain) == nil, "no names, refused: no banner after the fight either")
 	NoErrors(world, "no names, refused")
 end
 do
 	local world, kain, emu = Pull(NoNames({ lockdown = InCombat, lockdownMode = "error" }), "Emu")
 	t.Check(emu.music == 1, "no names, error: Emu still gets the #1 music")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names, error: Kain sees Emu named once combat ends")
+	t.Check(Rig.StolenText(kain) == nil, "no names, error: no banner after the fight either")
 	NoErrors(world, "no names, error")
 end
 do
+	-- The lockdown lifts mid-fight: the held-back claim gets out in time.
 	local liftAt
-	local world, kain = Pull(NoNames({ lockdown = function(w) return w.combat or (liftAt and w.now < liftAt) end }), "Emu",
-		function(w) liftAt = w.now + 10 + 60 end)
-	t.Check(Rig.StolenText(kain) == nil, "no names, long lockdown: nothing while it lasts")
-	world:Run(60)
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names, long lockdown: Kain sees Emu named once it lifts")
-	NoErrors(world, "no names, long lockdown")
+	local world, kain, _, inCombat = Pull(NoNames({ lockdown = function(w) return w.combat and not (liftAt and w.now >= liftAt) end }), "Emu",
+		function(w) liftAt = w.now + 2 end)
+	t.Check(inCombat == nil, "no names, lockdown lifts mid-fight: nothing while it lasts")
+	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names, lockdown lifts mid-fight: Kain sees Emu named once it lifts")
+	NoErrors(world, "no names, lockdown lifts mid-fight")
 end
 do
 	local world, kain, emu = Pull(NoNames({ lockdown = InCombat }), "Emu", function(world)
@@ -109,7 +109,7 @@ do
 		world:Run(3)
 	end)
 	t.Check(Rig.StolenText(kain) == nil, "no names, retaken: Kain sees no late banner about Emu")
-	t.Check(Rig.StolenText(emu) == "Kain has stolen your Balenciaga", "no names, retaken: Emu sees Kain named once combat ends")
+	t.Check(Rig.StolenText(emu) == nil, "no names, retaken: no banner for Emu after the fight either")
 	NoErrors(world, "no names, retaken")
 end
 do

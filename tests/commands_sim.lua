@@ -44,7 +44,7 @@ end
 do
 	local world, kain, inCombat = Pull({ lockdown = InCombat }, "fake Emu")
 	t.Check(inCombat == nil, "lockdown: nothing during the fight")
-	t.Check(Rig.StolenText(kain) == FAKE_STOLE, "lockdown: the fake user is named once combat ends")
+	t.Check(Rig.StolenText(kain) == nil, "lockdown: no banner after the fight either")
 	NoErrors(world, "lockdown")
 end
 
@@ -99,8 +99,7 @@ do
 	world:Run(10)
 	world:SetCombat(false)
 	world:Run(2)
-	t.Check(lines == 2, "debug: one line for the refusal, one for the send that got out (got " .. lines .. ")")
-	t.Check(Rig.StolenText(kain) == FAKE_STOLE, "debug: the banner still shows")
+	t.Check(lines == 1, "debug: one line for the refused retries, not one per poll (got " .. lines .. ")")
 	NoErrors(world, "debug")
 end
 
@@ -139,7 +138,7 @@ end
 do
 	local world, kain, inCombat = SoloLose({ lockdown = InCombat }, "fake Emu")
 	t.Check(inCombat == nil, "lose + fake, lockdown: nothing during the fight")
-	t.Check(Rig.StolenText(kain) == FAKE_STOLE, "lose + fake, lockdown: the fake user is named once combat ends")
+	t.Check(Rig.StolenText(kain) == nil, "lose + fake, lockdown: no banner after the fight either")
 	NoErrors(world, "lose + fake, lockdown")
 end
 

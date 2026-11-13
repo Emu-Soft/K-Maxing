@@ -48,7 +48,7 @@ In a 5-player dungeon, the moment you become the **#1 damage dealer** on Forever
 
 Lose the top spot for more than a moment and the timer freezes in red while the music fades out.
 
-**Avada Balenciaga:** if the player who takes #1 from you also runs K-Maxing, you'll see *"<name> has stolen your Balenciaga"*, with a sound to match. Forever's damage meter hides names from addons in combat, but the game can still draw them, and the meter's class column shows whether the new #1 is one of your group's K-Maxing users. So the banner works mid-fight, dungeon lockdown included. If that can't settle it (say, two players of the same class, only one with K-Maxing), the K-Maxing user who took #1 tells the group themselves, and the banner shows as soon as the game lets that message through.
+**Avada Balenciaga:** if the player who takes #1 from you also runs K-Maxing, you'll see *"<name> has stolen your Balenciaga"*, with a sound to match. Forever's damage meter hides names from addons in combat, but the game can still draw them, and the meter's class column shows whether the new #1 is one of your group's K-Maxing users. So the banner works mid-fight, dungeon lockdown included. If that can't settle it (say, two players of the same class, only one with K-Maxing), the K-Maxing user who took #1 tells the group themselves. If the game holds that message back until the fight is over, there is no banner.
 
 ### Good to know
 - It only works **inside 5-player dungeons**, and only reads Forever's own damage meter, so keep that meter turned on.

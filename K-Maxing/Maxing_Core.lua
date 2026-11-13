@@ -162,12 +162,11 @@ end
 -- #1 (the meter's isLocalPlayer flag stays readable), so whoever takes #1
 -- sends "TOP" to the group, and the player who lost it can name them.
 --
--- In a dungeon lockdown the message can't go out. Then the claim waits and
--- is sent as soon as the client allows, saying how long ago #1 was taken
--- ("TOP:12.5"), and the player who lost #1 shows the banner at that point.
+-- In a dungeon lockdown the message can't go out. Then the claim is retried
+-- until the client allows it, saying how long ago #1 was taken ("TOP:12.5"),
+-- but only until the fight ends: the banner is for mid-fight, never after.
 local TOP_CLAIM_WINDOW = 5 -- a claim must come from at most this long before we lost #1
 local TOP_CLAIM_SLACK = 1 -- the two meters can disagree for about this long
-local TOP_CLAIM_GIVE_UP = 600 -- stop retrying a claim after this long
 
 local pendingClaimAt = nil -- when we took #1, until the claim gets out
 local lastTopClaimName, lastTopClaimTime = nil, 0
@@ -183,10 +182,6 @@ end
 
 local function SendPendingClaim()
 	local ago = GetTime() - pendingClaimAt
-	if ago > TOP_CLAIM_GIVE_UP then
-		pendingClaimAt = nil
-		return
-	end
 	local message = ago < POLL_INTERVAL and "TOP" or string.format("TOP:%.1f", ago)
 	if SendComm(message) then pendingClaimAt = nil end
 end
@@ -1108,13 +1103,6 @@ local function OnTopClaim(name, claimTime)
 	lastTopClaimName, lastTopClaimTime = name, claimTime
 	local steal = pendingSteal
 	if not steal or isCurrentlyTop then return end
-	-- A lockdown can last past the fight, so a claim may land well after
-	-- combat. ClaimFits still makes sure it's about this loss.
-	if GetTime() - steal.lostAt > TOP_CLAIM_GIVE_UP then
-		pendingSteal = nil
-		Debug("claim came too long after you lost #1; ignored")
-		return
-	end
 	if ClaimFits(claimTime, steal.seenTop, steal.lostAt) then
 		pendingSteal = nil
 		lastTopClaimName = nil
@@ -1126,10 +1114,6 @@ end
 
 local function SendPendingFakeClaim()
 	local ago = GetTime() - pendingFakeClaimAt
-	if ago > TOP_CLAIM_GIVE_UP then
-		pendingFakeClaimAt = nil
-		return
-	end
 	local inGroup = (IsInRaid and IsInRaid()) or (IsInGroup and IsInGroup())
 	local message = string.format("FAKETOP:%s:%.1f", fakeUserName, ago)
 	if SendComm(message, not inGroup and UnitName("player") or nil) then
@@ -1346,7 +1330,10 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 	elseif event == "PLAYER_REGEN_DISABLED" then
 		combatStartTime = GetTime()
 	elseif event == "PLAYER_REGEN_ENABLED" then
+		-- The fight is over: no late banners, and no late claims.
+		if pendingSteal then Debug("fight over before a claim got through; no banner") end
 		simulatedLoss = false
+		pendingSteal, pendingClaimAt, pendingFakeClaimAt = nil, nil, nil
 		combatStartTime = nil
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		local inInstance, instanceType = IsInInstance()
