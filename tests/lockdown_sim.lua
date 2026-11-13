@@ -54,6 +54,17 @@ do
 	NoErrors(world, "refused")
 end
 
+print("-- lockdown lasts a minute past the fight")
+do
+	local liftAt
+	local world, kain = Pull({ lockdown = function(w) return w.combat or (liftAt and w.now < liftAt) end }, "Emu",
+		function(w) liftAt = w.now + 10 + 60 end)
+	t.Check(Rig.StolenText(kain) == nil, "long lockdown: nothing while it lasts")
+	world:Run(60)
+	t.Check(Rig.StolenText(kain) == EMU_STOLE, "long lockdown: Kain sees Emu named once it lifts")
+	NoErrors(world, "long lockdown")
+end
+
 print("-- lockdown: sends raise a Lua error")
 do
 	local world, kain, emu = Pull({ lockdown = InCombat, lockdownMode = "error" }, "Emu")

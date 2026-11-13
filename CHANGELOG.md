@@ -11,7 +11,7 @@ Newest first. Each version has up to three sections: New, Changed, Fixed. The re
 
 ### Fixed
 - Avada Balenciaga now names the thief in combat. The damage meter hides names there, so the K-Maxing user who takes #1 now tells the group themselves.
-- If the game holds addon messages back during a dungeon fight, the steal banner now shows once the fight ends instead of never.
+- If the game holds addon messages back during a dungeon fight, the steal banner now shows as soon as the game lets the message through, instead of never.
 - Taking #1 while the game is holding addon messages back no longer stops the music from starting.
 
 ## 1.0.1

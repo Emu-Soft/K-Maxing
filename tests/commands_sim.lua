@@ -82,6 +82,26 @@ do
 	NoErrors(world, "spoof")
 end
 
+-- /kmax debug logs a held-back retry once, not every poll.
+do
+	local lines = 0
+	local world = Rig.NewWorld(CORE, { lockdown = InCombat })
+	local kain = world:AddClient("Kain")
+	kain.env.print = function(text) if text:find("send FAKETOP") then lines = lines + 1 end end
+	world:Slash(kain, "KMAX", "debug")
+	world:Slash(kain, "KMAX", "fake Emu")
+	world:SetCombat(true)
+	world:SetTop("Kain")
+	world:Run(2)
+	world:SetTop("Other")
+	world:Run(10)
+	world:SetCombat(false)
+	world:Run(2)
+	t.Check(lines == 2, "debug: one line for the refusal, one for the send that got out (got " .. lines .. ")")
+	t.Check(Rig.StolenText(kain) == FAKE_STOLE, "debug: the banner still shows")
+	NoErrors(world, "debug")
+end
+
 -- The player who passes you has a readable name (or none at all) on the meter.
 do
 	local world, kain, inCombat = Pull({ plainNames = true }, "fake Emu")

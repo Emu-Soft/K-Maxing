@@ -71,6 +71,29 @@ local function Debug(text)
 	if debugOn then print("|cffff69b4[K-Maxing debug]|r " .. text) end
 end
 
+-- Logs a send, but only when its outcome changes, so a retry loop held back
+-- by a lockdown prints one line, not two a second.
+local lastSendLog = {}
+local function DebugSend(message, channel, ok, result)
+	if not debugOn then return end
+	local outcome
+	if not ok then
+		outcome = "error " .. tostring(result)
+	else
+		outcome = tostring(result)
+		local codes = Enum and Enum.SendAddonMessageResult
+		if codes and type(result) == "number" then
+			for name, code in pairs(codes) do
+				if code == result then outcome = name .. " (" .. result .. ")" end
+			end
+		end
+	end
+	local kind = message:match("^[^:]+")
+	if lastSendLog[kind] == outcome then return end
+	lastSendLog[kind] = outcome
+	Debug("send " .. message .. " to " .. channel .. ": " .. outcome)
+end
+
 -- With a target, whispers that player instead of the group.
 local function SendComm(message, target)
 	local sendFunc = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or SendAddonMessage
@@ -87,7 +110,7 @@ local function SendComm(message, target)
 		return false
 	end
 	local ok, result = pcall(sendFunc, COMM_PREFIX, message, channel, target)
-	Debug("send " .. message .. " to " .. channel .. ": " .. (ok and tostring(result) or ("error " .. tostring(result))))
+	DebugSend(message, channel, ok, result)
 	if not ok then return false end
 	if issecretvalue and issecretvalue(result) then return true end
 	local codes = Enum and Enum.SendAddonMessageResult
@@ -113,12 +136,11 @@ end
 local TOP_CLAIM_WINDOW = 5 -- a claim must come from at most this long before we lost #1
 local TOP_CLAIM_SLACK = 1 -- the two meters can disagree for about this long
 local TOP_CLAIM_GIVE_UP = 600 -- stop retrying a claim after this long
-local LATE_CLAIM_AFTER_COMBAT = 30 -- how long after combat a late claim still counts
 
 local pendingClaimAt = nil -- when we took #1, until the claim gets out
 local lastTopClaimName, lastTopClaimTime = nil, 0
 local lastSeenTopTime = 0 -- last poll that saw us at #1
-local pendingSteal = nil -- set when we lost #1 to a hidden name: { lostAt, seenTop, expiresAt }
+local pendingSteal = nil -- set when we lost #1 to a hidden name: { lostAt, seenTop }
 
 -- Whether a claim of #1 made at claimTime explains losing #1 at lostAt.
 local function ClaimFits(claimTime, seenTop, lostAt)
@@ -1020,9 +1042,11 @@ local function OnTopClaim(name, claimTime)
 	lastTopClaimName, lastTopClaimTime = name, claimTime
 	local steal = pendingSteal
 	if not steal or isCurrentlyTop then return end
-	if steal.expiresAt and GetTime() > steal.expiresAt then
+	-- A lockdown can last past the fight, so a claim may land well after
+	-- combat. ClaimFits still makes sure it's about this loss.
+	if GetTime() - steal.lostAt > TOP_CLAIM_GIVE_UP then
 		pendingSteal = nil
-		Debug("claim came too long after combat; ignored")
+		Debug("claim came too long after you lost #1; ignored")
 		return
 	end
 	if ClaimFits(claimTime, steal.seenTop, steal.lostAt) then
@@ -1252,7 +1276,6 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		simulatedLoss = false
 		combatStartTime = nil
-		if pendingSteal then pendingSteal.expiresAt = GetTime() + LATE_CLAIM_AFTER_COMBAT end
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		local inInstance, instanceType = IsInInstance()
 		inDungeon = inInstance and instanceType == "party"
