@@ -1,8 +1,9 @@
 -- Simulates Blizzard's dungeon lockdown on WoW: Forever: in combat the meter
 -- hides names, and addon messages can be refused (a lockdown result code, or
 -- a Lua error), arrive late, or come from a hidden sender. Checks that the
--- #1 display still works and that the steal banner names the thief as soon
--- as a message can get through, and never names the wrong player.
+-- #1 display still works, that the banner names the thief from the meter
+-- during the fight, and that when the meter gives no name, a K-Maxing claim
+-- names them as soon as it gets through, never naming the wrong player.
 --
 --   lua5.1 tests/lockdown_sim.lua [path to Maxing_Core.lua]
 
@@ -37,111 +38,93 @@ end
 
 local EMU_STOLE = "Emu has stolen your Balenciaga"
 
-print("-- messages flow in combat")
+print("-- the meter's hidden name goes straight on the banner")
+for _, case in ipairs({
+	{ "open", {} },
+	{ "refused", { lockdown = InCombat } },
+	{ "error", { lockdown = InCombat, lockdownMode = "error" } },
+	{ "hidden sender", { lockdown = InCombat, secretSender = true } },
+	{ "hidden index", { lockdown = InCombat, indexSecret = true } },
+}) do
+	local label, options = case[1], case[2]
+	local world, kain, emu, inCombat = Pull(options, "Emu")
+	t.Check(inCombat == EMU_STOLE, label .. ": Kain sees Emu named during the fight")
+	t.Check(kain.music == 1 and emu.music == 1, label .. ": both get the #1 music")
+	NoErrors(world, label)
+end
 do
-	local world, kain, emu, inCombat = Pull({}, "Emu")
-	t.Check(inCombat == EMU_STOLE, "open: Kain sees Emu named during the fight")
-	t.Check(kain.music == 1 and emu.music == 1, "open: both get the #1 music")
-	NoErrors(world, "open")
+	local world, kain, _, inCombat = Pull({ lockdown = InCombat }, "Outsider")
+	t.Check(inCombat == "Outsider has stolen your Balenciaga", "outsider: named during the fight, no K-Maxing needed")
+	NoErrors(world, "outsider")
 end
 
-print("-- lockdown: sends refused with a lockdown result")
-do
-	local world, kain, emu, inCombat = Pull({ lockdown = InCombat }, "Emu")
-	t.Check(emu.music == 1, "refused: Emu still gets the #1 music")
-	t.Check(inCombat == nil, "refused: no name during the fight (nothing can get through)")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "refused: Kain sees Emu named once combat ends")
-	NoErrors(world, "refused")
+print("-- the meter gives no name: a K-Maxing claim names the thief")
+local function NoNames(options)
+	options.noNames = true
+	return options
 end
-
-print("-- lockdown lasts a minute past the fight")
+do
+	local world, kain, _, inCombat = Pull(NoNames({}), "Emu")
+	t.Check(inCombat == EMU_STOLE, "no names, open: Kain sees Emu named during the fight")
+	NoErrors(world, "no names, open")
+end
+do
+	local world, kain, _, inCombat = Pull(NoNames({ lockdown = InCombat }), "Emu")
+	t.Check(inCombat == nil, "no names, refused: nothing during the fight (nothing can get through)")
+	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names, refused: Kain sees Emu named once combat ends")
+	NoErrors(world, "no names, refused")
+end
+do
+	local world, kain, emu = Pull(NoNames({ lockdown = InCombat, lockdownMode = "error" }), "Emu")
+	t.Check(emu.music == 1, "no names, error: Emu still gets the #1 music")
+	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names, error: Kain sees Emu named once combat ends")
+	NoErrors(world, "no names, error")
+end
 do
 	local liftAt
-	local world, kain = Pull({ lockdown = function(w) return w.combat or (liftAt and w.now < liftAt) end }, "Emu",
+	local world, kain = Pull(NoNames({ lockdown = function(w) return w.combat or (liftAt and w.now < liftAt) end }), "Emu",
 		function(w) liftAt = w.now + 10 + 60 end)
-	t.Check(Rig.StolenText(kain) == nil, "long lockdown: nothing while it lasts")
+	t.Check(Rig.StolenText(kain) == nil, "no names, long lockdown: nothing while it lasts")
 	world:Run(60)
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "long lockdown: Kain sees Emu named once it lifts")
-	NoErrors(world, "long lockdown")
+	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names, long lockdown: Kain sees Emu named once it lifts")
+	NoErrors(world, "no names, long lockdown")
 end
-
-print("-- lockdown: sends raise a Lua error")
 do
-	local world, kain, emu = Pull({ lockdown = InCombat, lockdownMode = "error" }, "Emu")
-	t.Check(emu.music == 1, "error: Emu still gets the #1 music")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "error: Kain sees Emu named once combat ends")
-	NoErrors(world, "error")
-end
-
-print("-- lockdown, and names stay hidden after combat too")
-do
-	local world, kain = Pull({ lockdown = InCombat, secretOutOfCombat = true }, "Emu")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "hidden after combat: Kain sees Emu named once combat ends")
-	NoErrors(world, "hidden after combat")
-end
-
-print("-- lockdown: Kain takes #1 back before combat ends")
-do
-	local world, kain, emu = Pull({ lockdown = InCombat }, "Emu", function(world)
+	local world, kain, emu = Pull(NoNames({ lockdown = InCombat }), "Emu", function(world)
 		world:SetTop("Kain")
 		world:Run(3)
 	end)
-	t.Check(Rig.StolenText(kain) == nil, "retaken: Kain sees no late banner about Emu")
-	t.Check(Rig.StolenText(emu) == "Kain has stolen your Balenciaga", "retaken: Emu sees Kain named once combat ends")
-	NoErrors(world, "retaken")
+	t.Check(Rig.StolenText(kain) == nil, "no names, retaken: Kain sees no late banner about Emu")
+	t.Check(Rig.StolenText(emu) == "Kain has stolen your Balenciaga", "no names, retaken: Emu sees Kain named once combat ends")
+	NoErrors(world, "no names, retaken")
 end
-
-print("-- lockdown: the new #1 doesn't run K-Maxing")
 do
-	local world, kain = Pull({ lockdown = InCombat }, "nobody")
-	t.Check(Rig.StolenText(kain) == nil, "outsider: no banner")
-	NoErrors(world, "outsider")
+	local world, kain = Pull(NoNames({ lockdown = InCombat }), "nobody")
+	t.Check(Rig.StolenText(kain) == nil, "no names, outsider: no banner (nobody can say who it was)")
+	NoErrors(world, "no names, outsider")
 	-- Emu takes #1 from the outsider later in the same fight: Emu didn't take it from Kain.
-	world, kain = Pull({ lockdown = InCombat }, "nobody", function(world)
+	world, kain = Pull(NoNames({ lockdown = InCombat }), "nobody", function(world)
 		world:Run(3)
 		world:SetTop("Emu")
 		world:Run(3)
 	end)
-	t.Check(Rig.StolenText(kain) == nil, "outsider, then Emu: Kain's banner doesn't blame Emu")
-	NoErrors(world, "outsider, then Emu")
+	t.Check(Rig.StolenText(kain) == nil, "no names, outsider then Emu: Kain's banner doesn't blame Emu")
+	NoErrors(world, "no names, outsider then Emu")
 end
-
-print("-- messages arrive late")
 do
-	local world, kain = Pull({ delay = 0.3 }, "Emu")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "0.3s delay: Kain sees Emu named")
-	NoErrors(world, "0.3s delay")
-	world, kain = Pull({ delay = 2 }, "Emu")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "2s delay: Kain sees Emu named when the message lands")
-	NoErrors(world, "2s delay")
+	local world, kain = Pull(NoNames({ delay = 2 }), "Emu")
+	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names, 2s delay: Kain sees Emu named when the message lands")
+	NoErrors(world, "no names, 2s delay")
 	-- A claim that lands much later than the loss could be from someone who
 	-- took #1 from a third player afterwards, so it isn't trusted.
-	world, kain = Pull({ delay = 4 }, "Emu")
-	t.Check(Rig.StolenText(kain) == nil, "4s delay: no banner (too late to be sure who took it)")
-	NoErrors(world, "4s delay")
+	world, kain = Pull(NoNames({ delay = 4 }), "Emu")
+	t.Check(Rig.StolenText(kain) == nil, "no names, 4s delay: no banner (too late to be sure who took it)")
+	NoErrors(world, "no names, 4s delay")
 end
-
-print("-- the sender's name is hidden")
 do
-	local world, kain, emu = Pull({ secretSender = true }, "Emu")
-	t.Check(emu.music == 1, "hidden sender: Emu still gets the #1 music")
-	t.Check(Rig.StolenText(kain) == nil, "hidden sender: no banner (the name can't be read)")
-	NoErrors(world, "hidden sender")
-end
-
-print("-- the meter's rows have no name at all")
-do
-	local world, kain = Pull({ noNames = true }, "Emu")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names: Kain sees Emu named")
-	NoErrors(world, "no names")
-end
-
-print("-- the meter's row index is hidden")
-do
-	local world, kain, emu = Pull({ indexSecret = true }, "Emu")
-	t.Check(kain.music == 1 and emu.music == 1, "hidden index: #1 still detected from row order")
-	t.Check(Rig.StolenText(kain) == EMU_STOLE, "hidden index: Kain sees Emu named")
-	NoErrors(world, "hidden index")
+	local world, kain = Pull(NoNames({ secretSender = true }), "Emu")
+	t.Check(Rig.StolenText(kain) == nil, "no names, hidden sender: no banner (the claim can't be read)")
+	NoErrors(world, "no names, hidden sender")
 end
 
 t.Finish()

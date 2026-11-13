@@ -5,13 +5,15 @@ Newest first. Each version has up to three sections: New, Changed, Fixed. The re
 ## Unreleased
 
 ### New
-- `/kmax fake <name>` pretends a K-Maxing user took #1 from you each time you lose it, for testing the steal banner without a second K-Maxing user. `/kmax fake off` stops it.
+- `/kmax fake <name>` pretends a K-Maxing user claimed #1 each time you lose it, for testing the backup path when the meter gives no name. `/kmax fake off` stops it.
 - `/kmax debug` prints each step of working out who took #1.
-- `/kmax lose` pretends someone passed you on the meter until combat ends, so you can test losing #1 on your own. `/kmax lose off` stops it early.
+- `/kmax lose [name]` pretends someone passed you on the meter until combat ends, so you can test losing #1 on your own. `/kmax lose off` stops it early.
+
+### Changed
+- Avada Balenciaga now names whoever takes #1 from you, not just K-Maxing users.
 
 ### Fixed
-- Avada Balenciaga now names the thief in combat. The damage meter hides names there, so the K-Maxing user who takes #1 now tells the group themselves.
-- If the game holds addon messages back during a dungeon fight, the steal banner now shows as soon as the game lets the message through, instead of never.
+- Avada Balenciaga now names the thief in combat, dungeon lockdown included. The name comes straight from the damage meter.
 - Taking #1 while the game is holding addon messages back no longer stops the music from starting.
 
 ## 1.0.1

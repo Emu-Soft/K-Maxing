@@ -19,19 +19,37 @@
 -- Each client records: texts (every SetText), sent (messages that went out),
 -- attempts (send calls, including refused ones) and music (PlayMusic calls).
 --
--- Secret values are one sentinel table; issecretvalue() spots it, and any
--- compare, concatenation or table-key use of it fails like the real thing.
-
+-- Secret values wrap the real value. issecretvalue() spots them; the game
+-- can still draw them (tostring, so string.format("%s") shows the real
+-- text, as SetText does in game), but compares, arithmetic and ".." fail
+-- like the real thing.
 local Rig = {}
 
-local SECRET = setmetatable({}, {
-	__tostring = function() return "SECRET" end,
+local SecretMT = {
+	__tostring = function(v) return tostring(rawget(v, "value")) end,
 	__concat = function() error("attempt to concatenate a secret string value") end,
 	__eq = function() error("attempt to compare a secret value") end,
 	__lt = function() error("attempt to compare a secret value") end,
 	__le = function() error("attempt to compare a secret value") end,
-})
-Rig.SECRET = SECRET
+	__index = function() error("attempt to index a secret value") end,
+}
+function Rig.Secret(value) return setmetatable({ value = value }, SecretMT) end
+local function IsSecret(v) return type(v) == "table" and getmetatable(v) == SecretMT end
+
+-- The game's string.format takes secrets and gives back a secret string.
+local gameString = setmetatable({
+	format = function(fmt, ...)
+		local args, anySecret = { ... }, false
+		for i = 1, select("#", ...) do
+			if IsSecret(args[i]) then
+				anySecret = true
+				args[i] = rawget(args[i], "value")
+			end
+		end
+		local text = string.format(fmt, unpack(args, 1, select("#", ...)))
+		return anySecret and Rig.Secret(text) or text
+	end,
+}, { __index = string })
 
 -- The result codes the rig's SendAddonMessage returns.
 local SEND_RESULT = { Success = 0, AddonMessageThrottle = 3, AddonMessageLockdown = 11 }
@@ -43,7 +61,10 @@ local function NewFrame(log)
 	return setmetatable(f, { __index = function(_, k)
 		if type(k) ~= "string" or not k:find("^%u") then return nil end
 		if k == "SetScript" then return function(self, name, fn) self.scripts[name] = fn end end
-		if k == "SetText" then return function(_, text) log[#log + 1] = text end end
+		-- What the player would see: secrets are drawn as their real text.
+		if k == "SetText" then
+			return function(_, text) log[#log + 1] = IsSecret(text) and rawget(text, "value") or text end
+		end
 		if k == "CreateTexture" or k == "CreateFontString" or k == "CreateAnimationGroup"
 			or k == "CreateAnimation" then
 			return function() return NewFrame(log) end
@@ -96,7 +117,8 @@ function Rig.NewWorld(corePath, options)
 			if m.at <= world.now + 1e-9 then
 				for _, c in ipairs(world.clients) do
 					if not m.to or m.to == c.name then
-						local sender = opts.secretSender and SECRET or (m.from .. "-Realm")
+						local sender = m.from .. "-Realm"
+						if opts.secretSender then sender = Rig.Secret(sender) end
 						Fire(c, "CHAT_MSG_ADDON", m.prefix, m.msg, m.channel, sender)
 					end
 				end
@@ -115,7 +137,14 @@ function Rig.NewWorld(corePath, options)
 			if type(k) == "string" and k:find("^BalenciagaSlider_") then return NewFrame(c.texts) end
 		end })
 		env._G = env
-		env.issecretvalue = function(v) return v == SECRET end
+		env.issecretvalue = IsSecret
+		env.string = gameString
+		-- Takes a (secret) GUID, gives the name without the realm, as secret as the GUID.
+		env.UnitNameFromGUID = function(guid)
+			local plain = IsSecret(guid) and rawget(guid, "value") or guid
+			local short = plain:match("^Player%-(.+)$")
+			return IsSecret(guid) and Rig.Secret(short) or short
+		end
 		env.GetTime = function() return world.now end
 		env.UIParent = NewFrame(c.texts)
 		env.CreateFrame = function(_, frameName)
@@ -173,10 +202,17 @@ function Rig.NewWorld(corePath, options)
 		for _, c in ipairs(self.clients) do
 			local hidden = (self.combat or opts.secretOutOfCombat) and not opts.plainNames
 			local shownName = topName
-			if opts.noNames then shownName = nil elseif hidden then shownName = SECRET end
+			-- Party members' names come with their realm; the GUID gives the short name.
+			local shownName, guid = topName .. "-Realm", "Player-" .. topName
+			if opts.noNames then
+				shownName, guid = nil, nil
+			elseif hidden then
+				shownName, guid = Rig.Secret(shownName), Rig.Secret(guid)
+			end
 			c.rows = { {
-				index = opts.indexSecret and SECRET or 1,
+				index = opts.indexSecret and Rig.Secret(1) or 1,
 				name = shownName,
+				sourceGUID = guid,
 				isLocalPlayer = (c.name == topName),
 			} }
 		end

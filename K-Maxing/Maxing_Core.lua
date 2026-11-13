@@ -6,8 +6,10 @@ for the moment the player becomes the #1 damage dealer in combat. While #1: play
 pulses logo to track loudness, and updates a timer. On loss: smooth 2s audio 
 and red timer fadeout.
 
-Includes "Avada Balenciaga" takeover detection via Addon Comm Channels: the
-player who takes #1 announces it, since the meter hides names in combat.
+Includes "Avada Balenciaga": whoever takes #1 from you is named on a banner,
+straight from the meter (a SECRET name in combat, which the game still
+draws). If the meter gives no name, a K-Maxing user's own claim, sent over
+Addon Comm Channels, names them instead.
 --]]
 
 local addonName, ns = ...
@@ -54,7 +56,6 @@ end
 -- Addon Comm Network (K-Targeter Compatible Communication System)
 -----------------------------------------------------------------------
 
-local balenciagaUsers = {}
 
 if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
 	C_ChatInfo.RegisterAddonMessagePrefix(COMM_PREFIX)
@@ -124,11 +125,10 @@ local function BroadcastPresence()
 	SendComm("PING")
 end
 
--- Who took #1, told by the mod itself. In combat the damage meter hides every
--- name, but each K-Maxing user can still see whether they themselves are #1
--- (the meter's isLocalPlayer flag stays readable). So whoever takes #1 sends
--- "TOP" to the group, and the player who lost it reads the thief's name from
--- that message instead of from the meter.
+-- Who took #1, told by the mod itself: the backup for when the meter's row
+-- has no name at all. Each K-Maxing user can see whether they themselves are
+-- #1 (the meter's isLocalPlayer flag stays readable), so whoever takes #1
+-- sends "TOP" to the group, and the player who lost it can name them.
 --
 -- In a dungeon lockdown the message can't go out. Then the claim waits and
 -- is sent as soon as the client allows, saying how long ago #1 was taken
@@ -167,8 +167,10 @@ end
 local fakeUserName = nil
 local pendingFakeClaimAt = nil
 
--- /kmax lose: for testing in game, the meter is read as if someone with a
--- hidden name had passed you, until combat ends or /kmax lose off.
+-- /kmax lose [name]: for testing in game, the meter is read as if someone
+-- had passed you (shown as <name>, or with no name at all, which leaves it
+-- to /kmax fake), until combat ends or /kmax lose off. Holds the pretend
+-- #1's name, HIDDEN_NAME for none, or false when off.
 local simulatedLoss = false
 
 -- The top row's name when the meter won't give it (hidden, or missing).
@@ -319,7 +321,18 @@ local function GetTopDamagePlayerName()
 	if not topEntry then return nil end
 	local isLocal = topEntry.isLocalPlayer
 	if isLocal ~= nil and issecretvalue and issecretvalue(isLocal) then isLocal = nil end
-	return topEntry.name, isLocal
+	return topEntry.name, isLocal, topEntry.sourceGUID
+end
+
+-- The name to show for a meter row, without the realm. Like the name itself,
+-- it may be a SECRET string: the game will draw it, but we can't read it.
+-- (UnitNameFromGUID takes the row's GUID even when that is secret too.)
+local function MeterDisplayName(name, guid)
+	if guid and UnitNameFromGUID then
+		local ok, shortName = pcall(UnitNameFromGUID, guid)
+		if ok and shortName then return shortName end
+	end
+	return name
 end
 
 local combatStartTime = nil
@@ -330,10 +343,11 @@ local function AmITopDamage()
 		return false
 	end
 
-	local topName, topIsLocal = GetTopDamagePlayerName()
+	local topName, topIsLocal, topGUID = GetTopDamagePlayerName()
 	if topIsLocal == nil then return false end -- no rows, or can't tell
-	if topName == nil or (issecretvalue and issecretvalue(topName)) then topName = HIDDEN_NAME end
-	return topIsLocal and true or false, topName
+	if topIsLocal then return true end
+	topName = MeterDisplayName(topName, topGUID)
+	return false, topName or HIDDEN_NAME
 end
 
 -----------------------------------------------------------------------
@@ -837,7 +851,8 @@ local function TriggerBalenciagaStolen(thiefName)
 	logoFrame:Hide()
 	timerFrame:Hide()
 
-	stolenText:SetText(thiefName .. " has stolen your Balenciaga")
+	-- string.format (not ..) so a SECRET name from the meter still shows.
+	stolenText:SetText(string.format("%s has stolen your Balenciaga", thiefName))
 	
 	stolenFrame:SetAlpha(1.0)
 	stolenFrame:Show()
@@ -1006,25 +1021,27 @@ local function OnLostTop(newTopName)
 	headline:SetScale(1)
 	glowTexture:SetVertexColor(1, 1, 1, 0.8)
 
-	-- In combat the new top player's name is a SECRET string: it can't be
-	-- used as a table key (that errors). Then the thief is whoever told us
-	-- they took #1 (see TakeRecentTopClaimer), or, if their message is held
-	-- back by a lockdown, whoever tells us later (see OnTopClaim). Out of
-	-- combat the meter's own name is used as before.
-	local hidden = newTopName == HIDDEN_NAME
-	-- With /kmax fake on, any loss to another player counts, named or not.
-	local unexplained = wasTop and newTopName ~= nil and (hidden or fakeUserName ~= nil)
+	-- Whoever is now #1 on the meter took it, K-Maxing or not. In combat the
+	-- meter's name is a SECRET string: we can't read it, but the banner can
+	-- still show it. Only when the meter gives no name at all do we fall back
+	-- to a K-Maxing user's own claim (see TakeRecentTopClaimer), which a
+	-- lockdown may hold back until later (see OnTopClaim).
+	-- (A SECRET value is only ever truth-tested here, never compared.)
+	local secret = issecretvalue and issecretvalue(newTopName)
+	local noName = not secret and newTopName == HIDDEN_NAME
+	local unexplained = wasTop and noName
 	if unexplained and fakeUserName then pendingFakeClaimAt = GetTime() end
 	local thief
-	if newTopName ~= nil and not hidden then
-		thief = balenciagaUsers[newTopName] and newTopName
+	if newTopName and not noName then
+		thief = newTopName
 		lastTopClaimName = nil
 	else
 		thief = TakeRecentTopClaimer()
 	end
-	Debug("lost #1 (was showing: " .. tostring(wasTop) .. "), new #1's name: "
-		.. (newTopName == nil and "none" or hidden and "hidden" or newTopName)
-		.. ", thief: " .. tostring(thief or "unknown"))
+	local nameKind = secret and "hidden (shown on the banner)" or not newTopName and "none"
+		or noName and "missing" or "readable"
+	Debug("lost #1 (was showing: " .. tostring(wasTop) .. "), new #1's name: " .. nameKind
+		.. ", banner: " .. (thief and "yes" or "no"))
 	if wasTop and thief then
 		TriggerBalenciagaStolen(thief)
 	else
@@ -1068,7 +1085,6 @@ local function SendPendingFakeClaim()
 	local message = string.format("FAKETOP:%s:%.1f", fakeUserName, ago)
 	if SendComm(message, not inGroup and UnitName("player") or nil) then
 		pendingFakeClaimAt = nil
-		balenciagaUsers[fakeUserName] = true
 		OnTopClaim(fakeUserName, GetTime() - ago)
 	end
 end
@@ -1194,7 +1210,11 @@ SlashCmdList["KMAX"] = function(msg)
 		return
 	end
 	if command:lower() == "lose" then
-		simulatedLoss = rest:lower() ~= "off"
+		if rest:lower() == "off" then
+			simulatedLoss = false
+		else
+			simulatedLoss = rest ~= "" and rest or HIDDEN_NAME
+		end
 		if not simulatedLoss then
 			print("|cffff69b4K-Maxing:|r back to reading the real meter.")
 		elseif isCurrentlyTop then
@@ -1288,19 +1308,16 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 
 	elseif event == "CHAT_MSG_ADDON" and prefix == COMM_PREFIX then
 		if issecretvalue and issecretvalue(sender) then return end
+		-- PING/PONG: answered so 1.0.1 clients, which only name K-Maxing users,
+		-- still know we run it.
 		if msg == "PING" then
 			local senderShort = (sender:match("([^-]+)")) or sender
-			balenciagaUsers[senderShort] = true
 			if senderShort ~= UnitName("player") then
 				SendComm("PONG")
 			end
-		elseif msg == "PONG" then
-			local senderShort = (sender:match("([^-]+)")) or sender
-			balenciagaUsers[senderShort] = true
 		elseif msg == "TOP" or msg:find("^TOP:") then
 			local senderShort = (sender:match("([^-]+)")) or sender
 			if senderShort ~= UnitName("player") then
-				balenciagaUsers[senderShort] = true
 				local ago = tonumber(msg:match("^TOP:([%d.]+)$")) or 0
 				OnTopClaim(senderShort, GetTime() - ago)
 			end
@@ -1331,7 +1348,7 @@ ticker:SetScript("OnUpdate", function(self, elapsed)
 	end
 
 	local amTop, topPlayerName = AmITopDamage()
-	if simulatedLoss and amTop then amTop, topPlayerName = false, HIDDEN_NAME end
+	if simulatedLoss and amTop then amTop, topPlayerName = false, simulatedLoss end
 
 	-- Tell other K-Maxing users the moment we take #1, so they can name us.
 	if amTop and not wasPollTop then

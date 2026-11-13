@@ -48,20 +48,19 @@ In a 5-player dungeon, the moment you become the **#1 damage dealer** on Forever
 
 Lose the top spot for more than a moment and the timer freezes in red while the music fades out.
 
-**Avada Balenciaga:** if the player who takes #1 from you is also running K-Maxing, you'll see *"<name> has stolen your Balenciaga"*, with a sound to match. The game's damage meter hides player names in combat, so K-Maxing passes the name along itself: whoever takes #1 tells the rest of the group's K-Maxing users. If the game is holding addon messages back during a fight, the banner shows as soon as the game lets the message through instead. If the new #1 isn't running K-Maxing, you get the normal fade-out.
+**Avada Balenciaga:** whoever takes #1 from you, K-Maxing or not, gets named: *"<name> has stolen your Balenciaga"*, with a sound to match. The name comes straight from Forever's damage meter, which hides it from addons in combat but still lets the game draw it, so the banner works mid-fight, dungeon lockdown included. If the meter ever gives no name at all, a K-Maxing user who took #1 tells the group themselves, and the banner shows as soon as the game lets that message through.
 
 ### Good to know
 - It only works **inside 5-player dungeons**, and only reads Forever's own damage meter, so keep that meter turned on.
 - The soundtrack plays through the game's **Music** channel. If your music is muted, you won't hear it.
-- K-Maxing users in your group find each other automatically, so the steal banner can name the thief.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `/kmax` | Open the options. |
-| `/kmax fake <name>` | Testing: pretend `<name>` runs K-Maxing and takes #1 from you every time you lose it, so you can try the steal banner with a group that doesn't have the addon. `/kmax fake off` stops it. |
-| `/kmax lose` | Testing: in a dungeon fight while you're #1, pretend someone passed you on the meter, until combat ends. `/kmax lose off` stops it early. Pair it with `/kmax fake <name>` to try the steal banner on your own. |
+| `/kmax fake <name>` | Testing: pretend `<name>` runs K-Maxing and claims #1 every time you lose it. Only used when the meter gives no name, e.g. with `/kmax lose`. `/kmax fake off` stops it. |
+| `/kmax lose [name]` | Testing: in a dungeon fight while you're #1, pretend someone passed you on the meter, until combat ends. With a name, the banner names them. Without one, the meter seems to give no name, so `/kmax fake <name>` can try the backup path. `/kmax lose off` stops it early. |
 | `/kmax debug` | Print each step of working out who took #1 (lost #1, sends, claims). Type it again to turn it off. |
 | `/bmdiag` | Print what K-Maxing can see of the damage meter. Handy when it isn't triggering: run it mid-fight in a dungeon. |
 
