@@ -25,7 +25,8 @@ strips the realm with `UnitNameFromGUID(guid)`, which accepts a secret GUID.
 - Secret values are only truth-tested or passed to the game, never compared.
 - When the class can't settle it (same class, hidden class, no name), the
   K-Maxing user's own "TOP" claim names them; a refused claim is retried
-  until the lockdown lifts.
+  until the fight ends. No banner after the fight (Kain: "We don't need a
+  banner after the fight").
 
 ## Not chosen
 
