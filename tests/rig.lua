@@ -72,14 +72,17 @@ function Rig.NewWorld(corePath, options)
 		return opts.lockdown and opts.lockdown(world) or false
 	end
 
-	local function Send(c, prefix, msg)
+	local function Send(c, prefix, msg, channel, target)
 		c.attempts = c.attempts + 1
 		if LockedDown() then
 			if opts.lockdownMode == "error" then error("addon messages are restricted right now") end
 			return SEND_RESULT.AddonMessageLockdown
 		end
 		c.sent[#c.sent + 1] = msg
-		world.queue[#world.queue + 1] = { at = world.now + (opts.delay or 0), prefix = prefix, msg = msg, from = c.name }
+		world.queue[#world.queue + 1] = {
+			at = world.now + (opts.delay or 0), prefix = prefix, msg = msg, from = c.name,
+			channel = channel, to = channel == "WHISPER" and target or nil,
+		}
 		return SEND_RESULT.Success
 	end
 
@@ -88,8 +91,10 @@ function Rig.NewWorld(corePath, options)
 		for _, m in ipairs(world.queue) do
 			if m.at <= world.now + 1e-9 then
 				for _, c in ipairs(world.clients) do
-					local sender = opts.secretSender and SECRET or (m.from .. "-Realm")
-					Fire(c, "CHAT_MSG_ADDON", m.prefix, m.msg, "PARTY", sender)
+					if not m.to or m.to == c.name then
+						local sender = opts.secretSender and SECRET or (m.from .. "-Realm")
+						Fire(c, "CHAT_MSG_ADDON", m.prefix, m.msg, m.channel, sender)
+					end
 				end
 			else
 				keep[#keep + 1] = m
@@ -124,7 +129,7 @@ function Rig.NewWorld(corePath, options)
 		env.IsInGroup = function() return true end
 		env.C_ChatInfo = {
 			RegisterAddonMessagePrefix = function() end,
-			SendAddonMessage = function(prefix, msg) return Send(c, prefix, msg) end,
+			SendAddonMessage = function(prefix, msg, channel, target) return Send(c, prefix, msg, channel, target) end,
 		}
 		env.C_DamageMeter = { IsDamageMeterAvailable = function() return true end }
 		local provider = { Enumerate = function() return ipairs(c.rows) end }
@@ -145,6 +150,7 @@ function Rig.NewWorld(corePath, options)
 		env.GetScreenWidth = function() return 1920 end
 		env.IsAltKeyDown = function() return false end
 
+		c.env = env
 		local chunk = assert(loadfile(corePath))
 		setfenv(chunk, env)
 		chunk("K-Maxing", {})
@@ -192,6 +198,12 @@ function Rig.NewWorld(corePath, options)
 				end
 			end
 		end
+	end
+
+	-- Runs a slash command on one client, e.g. world:Slash(c, "KMAX", "fake Emu").
+	function world:Slash(c, key, msg)
+		local ok, err = pcall(c.env.SlashCmdList[key], msg)
+		if not ok then self.errors[#self.errors + 1] = c.name .. " /" .. key .. ": " .. tostring(err) end
 	end
 
 	function world:ClearTexts()

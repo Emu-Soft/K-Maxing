@@ -60,6 +60,7 @@ Lose the top spot for more than a moment and the timer freezes in red while the 
 | Command | What it does |
 |---|---|
 | `/kmax` | Open the options. |
+| `/kmax fake <name>` | Testing: pretend `<name>` runs K-Maxing and takes #1 from you every time you lose it, so you can try the steal banner with a group that doesn't have the addon. `/kmax fake off` stops it. |
 | `/bmdiag` | Print what K-Maxing can see of the damage meter. Handy when it isn't triggering: run it mid-fight in a dungeon. |
 
 ## Options (`/kmax`)

@@ -15,3 +15,5 @@ jobs:
         run: lua5.1 tests/steal_sim.lua K-Maxing/Maxing_Core.lua
       - name: Dungeon lockdown simulation
         run: lua5.1 tests/lockdown_sim.lua K-Maxing/Maxing_Core.lua
+      - name: Fake user command simulation
+        run: lua5.1 tests/fake_user_sim.lua K-Maxing/Maxing_Core.lua

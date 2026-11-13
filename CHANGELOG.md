@@ -4,6 +4,9 @@ Newest first. Each version has up to three sections: New, Changed, Fixed. The re
 
 ## Unreleased
 
+### New
+- `/kmax fake <name>` pretends a K-Maxing user took #1 from you each time you lose it, for testing the steal banner without a second K-Maxing user. `/kmax fake off` stops it.
+
 ### Fixed
 - Avada Balenciaga now names the thief in combat. The damage meter hides names there, so the K-Maxing user who takes #1 now tells the group themselves.
 - If the game holds addon messages back during a dungeon fight, the steal banner now shows once the fight ends instead of never.

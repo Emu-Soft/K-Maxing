@@ -65,19 +65,22 @@ end
 -- Returns true only if the message went out. In a dungeon lockdown the
 -- client refuses addon messages (with a result code, or an error), and that
 -- must never break the caller.
-local function SendComm(message)
+-- With a target, whispers that player instead of the group.
+local function SendComm(message, target)
 	local sendFunc = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or SendAddonMessage
 	if not sendFunc then return false end
 
 	local channel
-	if IsInRaid and IsInRaid() then
+	if target then
+		channel = "WHISPER"
+	elseif IsInRaid and IsInRaid() then
 		channel = "RAID"
 	elseif (IsInGroup and IsInGroup()) or (GetNumPartyMembers and GetNumPartyMembers() > 0) then
 		channel = "PARTY"
 	else
 		return false
 	end
-	local ok, result = pcall(sendFunc, COMM_PREFIX, message, channel)
+	local ok, result = pcall(sendFunc, COMM_PREFIX, message, channel, target)
 	if not ok then return false end
 	if issecretvalue and issecretvalue(result) then return true end
 	local codes = Enum and Enum.SendAddonMessageResult
@@ -125,6 +128,23 @@ local function SendPendingClaim()
 	end
 	local message = ago < POLL_INTERVAL and "TOP" or string.format("TOP:%.1f", ago)
 	if SendComm(message) then pendingClaimAt = nil end
+end
+
+-- /kmax fake <name>: a pretend K-Maxing user for testing in game. Each time
+-- we lose #1, the fake user claims it, and the claim takes the same road a
+-- real one does: an addon message (whispered to ourselves, as "FAKETOP")
+-- that a lockdown can hold back, retried until it gets out.
+local fakeUserName = nil
+local pendingFakeClaimAt = nil
+
+local function SendPendingFakeClaim()
+	local ago = GetTime() - pendingFakeClaimAt
+	if ago > TOP_CLAIM_GIVE_UP then
+		pendingFakeClaimAt = nil
+		return
+	end
+	local message = string.format("FAKETOP:%s:%.1f", fakeUserName, ago)
+	if SendComm(message, UnitName("player")) then pendingFakeClaimAt = nil end
 end
 
 -- The K-Maxing user who claimed #1 since we were last seen there, if any.
@@ -964,6 +984,7 @@ local function OnLostTop(newTopName)
 	-- back by a lockdown, whoever tells us later (see OnTopClaim). Out of
 	-- combat the meter's own name is used as before.
 	local hidden = newTopName ~= nil and issecretvalue and issecretvalue(newTopName)
+	if wasTop and hidden and fakeUserName then pendingFakeClaimAt = GetTime() end
 	local thief
 	if newTopName ~= nil and not hidden then
 		thief = balenciagaUsers[newTopName] and newTopName
@@ -1111,6 +1132,18 @@ end)
 
 SLASH_KMAX1 = "/kmax"
 SlashCmdList["KMAX"] = function(msg)
+	local command, rest = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
+	if command:lower() == "fake" then
+		if rest == "" or rest:lower() == "off" then
+			fakeUserName, pendingFakeClaimAt = nil, nil
+			print("|cffff69b4K-Maxing:|r fake user off.")
+		else
+			fakeUserName = rest:match("^[^%s:]+")
+			print("|cffff69b4K-Maxing:|r fake user |cffffffff" .. fakeUserName
+				.. "|r will claim #1 each time you lose it. |cffffffff/kmax fake off|r to stop.")
+		end
+		return
+	end
 	OpenOptions()
 end
 
@@ -1191,6 +1224,14 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 		elseif msg == "PONG" then
 			local senderShort = (sender:match("([^-]+)")) or sender
 			balenciagaUsers[senderShort] = true
+		elseif msg:find("^FAKETOP:") then
+			-- Only our own /kmax fake test can send this.
+			local senderShort = (sender:match("([^-]+)")) or sender
+			local name, ago = msg:match("^FAKETOP:([^:]+):([%d.]+)$")
+			if senderShort == UnitName("player") and name then
+				balenciagaUsers[name] = true
+				OnTopClaim(name, GetTime() - tonumber(ago))
+			end
 		elseif msg == "TOP" or msg:find("^TOP:") then
 			local senderShort = (sender:match("([^-]+)")) or sender
 			if senderShort ~= UnitName("player") then
@@ -1216,6 +1257,7 @@ ticker:SetScript("OnUpdate", function(self, elapsed)
 	if testModeActive or isUnlocked then return end
 
 	if pendingClaimAt then SendPendingClaim() end
+	if pendingFakeClaimAt and fakeUserName then SendPendingFakeClaim() end
 
 	if not inDungeon then
 		wasPollTop = false
