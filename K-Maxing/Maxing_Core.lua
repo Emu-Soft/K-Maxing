@@ -135,6 +135,11 @@ end
 -- real one does: an addon message (whispered to ourselves, as "FAKETOP")
 -- that a lockdown can hold back, retried until it gets out.
 local fakeUserName = nil
+
+-- /kmax lose: for testing in game, the meter is read as if someone with a
+-- hidden name had passed you, until combat ends or /kmax lose off.
+local simulatedLoss = false
+local SIMULATED_THIEF = {} -- stands in for the hidden name; never shown
 local pendingFakeClaimAt = nil
 
 local function SendPendingFakeClaim()
@@ -983,7 +988,8 @@ local function OnLostTop(newTopName)
 	-- they took #1 (see TakeRecentTopClaimer), or, if their message is held
 	-- back by a lockdown, whoever tells us later (see OnTopClaim). Out of
 	-- combat the meter's own name is used as before.
-	local hidden = newTopName ~= nil and issecretvalue and issecretvalue(newTopName)
+	local hidden = newTopName == SIMULATED_THIEF
+		or (newTopName ~= nil and issecretvalue and issecretvalue(newTopName))
 	if wasTop and hidden and fakeUserName then pendingFakeClaimAt = GetTime() end
 	local thief
 	if newTopName ~= nil and not hidden then
@@ -1133,6 +1139,19 @@ end)
 SLASH_KMAX1 = "/kmax"
 SlashCmdList["KMAX"] = function(msg)
 	local command, rest = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
+	if command:lower() == "lose" then
+		simulatedLoss = rest:lower() ~= "off"
+		if not simulatedLoss then
+			print("|cffff69b4K-Maxing:|r back to reading the real meter.")
+		elseif isCurrentlyTop then
+			print("|cffff69b4K-Maxing:|r pretending someone passed you on the meter, until combat ends. "
+				.. "|cffffffff/kmax lose off|r to stop.")
+		else
+			simulatedLoss = false
+			print("|cffff69b4K-Maxing:|r you need to be #1 first: get into a dungeon fight, then try again.")
+		end
+		return
+	end
 	if command:lower() == "fake" then
 		if rest == "" or rest:lower() == "off" then
 			fakeUserName, pendingFakeClaimAt = nil, nil
@@ -1201,6 +1220,7 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 	elseif event == "PLAYER_REGEN_DISABLED" then
 		combatStartTime = GetTime()
 	elseif event == "PLAYER_REGEN_ENABLED" then
+		simulatedLoss = false
 		combatStartTime = nil
 		if pendingSteal then pendingSteal.expiresAt = GetTime() + LATE_CLAIM_AFTER_COMBAT end
 	elseif event == "PLAYER_ENTERING_WORLD" then
@@ -1266,6 +1286,7 @@ ticker:SetScript("OnUpdate", function(self, elapsed)
 	end
 
 	local amTop, topPlayerName = AmITopDamage()
+	if simulatedLoss and amTop then amTop, topPlayerName = false, SIMULATED_THIEF end
 
 	-- Tell other K-Maxing users the moment we take #1, so they can name us.
 	if amTop and not wasPollTop then

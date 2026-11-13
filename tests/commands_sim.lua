@@ -1,7 +1,8 @@
--- Checks /kmax fake <name>: a pretend K-Maxing user for testing in game,
--- with nobody else in the group running K-Maxing.
+-- Checks the in-game test commands: /kmax fake <name> (a pretend K-Maxing
+-- user) and /kmax lose (pretend someone passed you on the meter), with
+-- nobody else in the group running K-Maxing.
 --
---   lua5.1 tests/fake_user_sim.lua [path to Maxing_Core.lua]
+--   lua5.1 tests/commands_sim.lua [path to Maxing_Core.lua]
 
 local Rig = dofile("tests/rig.lua")
 local CORE = arg[1] or "K-Maxing/Maxing_Core.lua"
@@ -79,6 +80,64 @@ do
 	world:Run(3)
 	t.Check(Rig.StolenText(kain) == nil, "a FAKETOP from another player is ignored")
 	NoErrors(world, "spoof")
+end
+
+-- /kmax lose: solo, with only the commands.
+local function SoloLose(options, fake)
+	local world = Rig.NewWorld(CORE, options)
+	local kain = world:AddClient("Kain")
+	if fake then world:Slash(kain, "KMAX", fake) end
+	world:SetCombat(true)
+	world:SetTop("Kain")
+	world:Run(2)
+	world:Slash(kain, "KMAX", "lose")
+	world:Run(3)
+	local inCombatText = Rig.StolenText(kain)
+	world:SetCombat(false)
+	world:Run(3)
+	return world, kain, inCombatText
+end
+
+do
+	local world, kain, inCombat = SoloLose({}, "fake Emu")
+	t.Check(inCombat == FAKE_STOLE, "lose + fake: the fake user is named during the fight")
+	NoErrors(world, "lose + fake")
+end
+
+do
+	local world, kain, inCombat = SoloLose({ lockdown = InCombat }, "fake Emu")
+	t.Check(inCombat == nil, "lose + fake, lockdown: nothing during the fight")
+	t.Check(Rig.StolenText(kain) == FAKE_STOLE, "lose + fake, lockdown: the fake user is named once combat ends")
+	NoErrors(world, "lose + fake, lockdown")
+end
+
+do
+	local world, kain = SoloLose({}, nil)
+	t.Check(Rig.StolenText(kain) == nil, "lose alone: no banner, just the fade-out")
+	-- Combat ended, so the next fight reads the real meter again.
+	world:SetCombat(true)
+	world:Run(2)
+	t.Check(kain.music == 2, "lose alone: the next fight is back to the real meter")
+	NoErrors(world, "lose alone")
+end
+
+do
+	local world = Rig.NewWorld(CORE, {})
+	local kain = world:AddClient("Kain")
+	world:SetCombat(true)
+	world:SetTop("Kain")
+	world:Run(2)
+	world:Slash(kain, "KMAX", "lose")
+	world:Run(1)
+	world:Slash(kain, "KMAX", "lose off")
+	world:Run(3)
+	t.Check(kain.music == 1 and Rig.StolenText(kain) == nil, "lose off within the grace period: still #1")
+	world:Slash(kain, "KMAX", "lose")
+	world:Run(3)
+	world:Slash(kain, "KMAX", "lose off")
+	world:Run(2)
+	t.Check(kain.music == 2, "lose off after losing: #1 comes back")
+	NoErrors(world, "lose off")
 end
 
 t.Finish()
