@@ -73,6 +73,23 @@ do
 	t.Check(#w.errors == 0, "same class: no Lua errors" .. (w.errors[1] and (": " .. w.errors[1]) or ""))
 end
 
+-- 6b. Two K-Maxing rogues: the class says "a K-Maxing user" and the meter's
+-- own name says which one, so the right rogue is named, lockdown or not.
+for _, lockdown in ipairs({ false, true }) do
+	local label = lockdown and "two K-Maxing rogues, lockdown" or "two K-Maxing rogues"
+	local w = Rig.NewWorld(CORE, { lockdown = lockdown and function(x) return x.combat end or nil })
+	local k = w:AddClient("Kain", "MAGE")
+	w:AddClient("RogueA", "ROGUE")
+	w:AddClient("RogueB", "ROGUE")
+	w:SetCombat(true)
+	w:SetTop("Kain")
+	w:Run(2)
+	w:SetTop("RogueB")
+	w:Run(3)
+	t.Check(Rig.StolenText(k) == "RogueB has stolen your Balenciaga", label .. ": RogueB is named during the fight")
+	t.Check(#w.errors == 0, label .. ": no Lua errors" .. (w.errors[1] and (": " .. w.errors[1]) or ""))
+end
+
 -- 7. A K-Maxing user on an older version never says hello, so isn't named.
 do
 	local w = Rig.NewWorld(CORE)
