@@ -48,7 +48,7 @@ In a 5-player dungeon, the moment you become the **#1 damage dealer** on Forever
 
 Lose the top spot for more than a moment and the timer freezes in red while the music fades out.
 
-**Avada Balenciaga:** if the player who takes #1 from you is also running K-Maxing, you'll see *"<name> has stolen your Balenciaga"*, with a sound to match. The game hides player names in combat, so this only fires when it can tell who took it. Otherwise you get the normal fade-out.
+**Avada Balenciaga:** if the player who takes #1 from you is also running K-Maxing, you'll see *"<name> has stolen your Balenciaga"*, with a sound to match. The game's damage meter hides player names in combat, so K-Maxing passes the name along itself: whoever takes #1 tells the rest of the group's K-Maxing users. If the new #1 isn't running K-Maxing, you get the normal fade-out.
 
 ### Good to know
 - It only works **inside 5-player dungeons**, and only reads Forever's own damage meter, so keep that meter turned on.

@@ -6,7 +6,8 @@ for the moment the player becomes the #1 damage dealer in combat. While #1: play
 pulses logo to track loudness, and updates a timer. On loss: smooth 2s audio 
 and red timer fadeout.
 
-Includes "Avada Balenciaga" takeover detection via Addon Comm Channels.
+Includes "Avada Balenciaga" takeover detection via Addon Comm Channels: the
+player who takes #1 announces it, since the meter hides names in combat.
 --]]
 
 local addonName, ns = ...
@@ -74,6 +75,32 @@ end
 
 local function BroadcastPresence()
 	SendComm("PING")
+end
+
+-- Who took #1, told by the mod itself. In combat the damage meter hides every
+-- name, but each K-Maxing user can still see whether they themselves are #1
+-- (the meter's isLocalPlayer flag stays readable). So whoever takes #1 sends
+-- "TOP" to the group, and the player who lost it reads the thief's name from
+-- that message instead of from the meter.
+local TOP_CLAIM_WINDOW = 5 -- seconds a claim stays usable
+local TOP_CLAIM_SLACK = 1 -- the two meters can disagree for about this long
+
+local lastTopClaimName, lastTopClaimTime = nil, 0
+local lastSeenTopTime = 0 -- last poll that saw us at #1
+
+local function RecordTopClaim(name)
+	lastTopClaimName, lastTopClaimTime = name, GetTime()
+end
+
+-- The K-Maxing user who claimed #1 since we were last seen there, if any.
+local function TakeRecentTopClaimer()
+	local name = lastTopClaimName
+	if not name then return nil end
+	lastTopClaimName = nil
+	local now = GetTime()
+	if now - lastTopClaimTime > TOP_CLAIM_WINDOW then return nil end
+	if lastTopClaimTime < lastSeenTopTime - TOP_CLAIM_SLACK then return nil end
+	return name
 end
 
 -----------------------------------------------------------------------
@@ -898,12 +925,18 @@ local function OnLostTop(newTopName)
 	glowTexture:SetVertexColor(1, 1, 1, 0.8)
 
 	-- In combat the new top player's name is a SECRET string: it can't be
-	-- used as a table key (that errors), so the "stolen" check can't run --
-	-- fall back to the normal fade-out. Out of combat it works as before.
-	local thiefKnown = newTopName ~= nil and not (issecretvalue and issecretvalue(newTopName))
-		and balenciagaUsers[newTopName]
-	if wasTop and thiefKnown then
-		TriggerBalenciagaStolen(newTopName)
+	-- used as a table key (that errors). Then the thief is whoever told us
+	-- they took #1 (see TakeRecentTopClaimer). Out of combat the meter's own
+	-- name is used as before.
+	local thief
+	if newTopName ~= nil and not (issecretvalue and issecretvalue(newTopName)) then
+		thief = balenciagaUsers[newTopName] and newTopName
+		lastTopClaimName = nil
+	else
+		thief = TakeRecentTopClaimer()
+	end
+	if wasTop and thief then
+		TriggerBalenciagaStolen(thief)
 	else
 		StartFadeOut(FADE_OUT_DURATION)
 	end
@@ -1034,6 +1067,7 @@ print("|cffff69b4Balenciaga Maxing:|r loaded. Type |cffffffff/kmax|r to open the
 
 local lostTopTimer = 0
 local LOST_TOP_THRESHOLD = 1.5
+local wasPollTop = false
 
 local eventsFrame = CreateFrame("Frame")
 eventsFrame:RegisterEvent("ADDON_LOADED")
@@ -1090,6 +1124,7 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 		BroadcastPresence()
 
 	elseif event == "CHAT_MSG_ADDON" and prefix == COMM_PREFIX then
+		if issecretvalue and issecretvalue(sender) then return end
 		if msg == "PING" then
 			local senderShort = (sender:match("([^-]+)")) or sender
 			balenciagaUsers[senderShort] = true
@@ -1099,6 +1134,12 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 		elseif msg == "PONG" then
 			local senderShort = (sender:match("([^-]+)")) or sender
 			balenciagaUsers[senderShort] = true
+		elseif msg == "TOP" then
+			local senderShort = (sender:match("([^-]+)")) or sender
+			if senderShort ~= UnitName("player") then
+				balenciagaUsers[senderShort] = true
+				RecordTopClaim(senderShort)
+			end
 		end
 	end
 end)
@@ -1117,13 +1158,19 @@ ticker:SetScript("OnUpdate", function(self, elapsed)
 	if testModeActive or isUnlocked then return end
 
 	if not inDungeon then
+		wasPollTop = false
 		if isCurrentlyTop then OnLostTop(nil) end
 		return
 	end
 
 	local amTop, topPlayerName = AmITopDamage()
 
+	-- Tell other K-Maxing users the moment we take #1, so they can name us.
+	if amTop and not wasPollTop then SendComm("TOP") end
+	wasPollTop = amTop
+
 	if amTop then
+		lastSeenTopTime = GetTime()
 		lostTopTimer = 0
 		if not isCurrentlyTop then
 			OnBecameTop()

@@ -2,6 +2,11 @@
 
 Newest first. Each version has up to three sections: New, Changed, Fixed. The release button builds each GitHub release's description from this file.
 
+## Unreleased
+
+### Fixed
+- Avada Balenciaga now names the thief in combat. The damage meter hides names there, so the K-Maxing user who takes #1 now tells the group themselves.
+
 ## 1.0.1
 
 ### Changed
