@@ -118,6 +118,13 @@ do
 	NoErrors(world, "hidden sender")
 end
 
+print("-- the meter's rows have no name at all")
+do
+	local world, kain = Pull({ noNames = true }, "Emu")
+	t.Check(Rig.StolenText(kain) == EMU_STOLE, "no names: Kain sees Emu named")
+	NoErrors(world, "no names")
+end
+
 print("-- the meter's row index is hidden")
 do
 	local world, kain, emu = Pull({ indexSecret = true }, "Emu")

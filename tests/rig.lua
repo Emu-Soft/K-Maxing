@@ -12,6 +12,9 @@
 --   secretSender   true: the sender of every received message is a secret value
 --   secretOutOfCombat  true: meter names stay secret out of combat too
 --   indexSecret    true: the meter's row index is secret
+--   plainNames     true: meter names are readable even in combat
+--   noNames        true: meter rows have no name at all
+--   solo           true: not in a group (only whispers go out)
 --
 -- Each client records: texts (every SetText), sent (messages that went out),
 -- attempts (send calls, including refused ones) and music (PlayMusic calls).
@@ -74,6 +77,7 @@ function Rig.NewWorld(corePath, options)
 
 	local function Send(c, prefix, msg, channel, target)
 		c.attempts = c.attempts + 1
+		if opts.solo and channel ~= "WHISPER" then return 9 end -- not in a group
 		if LockedDown() then
 			if opts.lockdownMode == "error" then error("addon messages are restricted right now") end
 			return SEND_RESULT.AddonMessageLockdown
@@ -126,7 +130,7 @@ function Rig.NewWorld(corePath, options)
 		env.UnitAffectingCombat = function() return world.combat end
 		env.IsInInstance = function() return true, "party" end
 		env.IsInRaid = function() return false end
-		env.IsInGroup = function() return true end
+		env.IsInGroup = function() return not opts.solo end
 		env.C_ChatInfo = {
 			RegisterAddonMessagePrefix = function() end,
 			SendAddonMessage = function(prefix, msg, channel, target) return Send(c, prefix, msg, channel, target) end,
@@ -167,10 +171,12 @@ function Rig.NewWorld(corePath, options)
 	function world:SetTop(topName)
 		self.top = topName
 		for _, c in ipairs(self.clients) do
-			local hidden = self.combat or opts.secretOutOfCombat
+			local hidden = (self.combat or opts.secretOutOfCombat) and not opts.plainNames
+			local shownName = topName
+			if opts.noNames then shownName = nil elseif hidden then shownName = SECRET end
 			c.rows = { {
 				index = opts.indexSecret and SECRET or 1,
-				name = hidden and SECRET or topName,
+				name = shownName,
 				isLocalPlayer = (c.name == topName),
 			} }
 		end

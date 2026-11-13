@@ -82,6 +82,16 @@ do
 	NoErrors(world, "spoof")
 end
 
+-- The player who passes you has a readable name (or none at all) on the meter.
+do
+	local world, kain, inCombat = Pull({ plainNames = true }, "fake Emu")
+	t.Check(inCombat == FAKE_STOLE, "readable names: the fake user is still named")
+	NoErrors(world, "readable names")
+	world, kain, inCombat = Pull({ noNames = true }, "fake Emu")
+	t.Check(inCombat == FAKE_STOLE, "no names on the meter: the fake user is still named")
+	NoErrors(world, "no names on the meter")
+end
+
 -- /kmax lose: solo, with only the commands.
 local function SoloLose(options, fake)
 	local world = Rig.NewWorld(CORE, options)
@@ -109,6 +119,12 @@ do
 	t.Check(inCombat == nil, "lose + fake, lockdown: nothing during the fight")
 	t.Check(Rig.StolenText(kain) == FAKE_STOLE, "lose + fake, lockdown: the fake user is named once combat ends")
 	NoErrors(world, "lose + fake, lockdown")
+end
+
+do
+	local world, kain, inCombat = SoloLose({ solo = true }, "fake Emu")
+	t.Check(inCombat == FAKE_STOLE, "lose + fake, not in a group: the fake user is named")
+	NoErrors(world, "not in a group")
 end
 
 do

@@ -65,6 +65,12 @@ end
 -- Returns true only if the message went out. In a dungeon lockdown the
 -- client refuses addon messages (with a result code, or an error), and that
 -- must never break the caller.
+-- /kmax debug: print each step of working out who took #1.
+local debugOn = false
+local function Debug(text)
+	if debugOn then print("|cffff69b4[K-Maxing debug]|r " .. text) end
+end
+
 -- With a target, whispers that player instead of the group.
 local function SendComm(message, target)
 	local sendFunc = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or SendAddonMessage
@@ -81,6 +87,7 @@ local function SendComm(message, target)
 		return false
 	end
 	local ok, result = pcall(sendFunc, COMM_PREFIX, message, channel, target)
+	Debug("send " .. message .. " to " .. channel .. ": " .. (ok and tostring(result) or ("error " .. tostring(result))))
 	if not ok then return false end
 	if issecretvalue and issecretvalue(result) then return true end
 	local codes = Enum and Enum.SendAddonMessageResult
@@ -131,26 +138,19 @@ local function SendPendingClaim()
 end
 
 -- /kmax fake <name>: a pretend K-Maxing user for testing in game. Each time
--- we lose #1, the fake user claims it, and the claim takes the same road a
--- real one does: an addon message (whispered to ourselves, as "FAKETOP")
--- that a lockdown can hold back, retried until it gets out.
+-- we lose #1, the fake user claims it. The claim is sent as an addon message
+-- ("FAKETOP", which other clients ignore), so a lockdown holds it back and
+-- it is retried like a real one; once a send goes through, we take the
+-- claim ourselves rather than waiting for the message to come back.
 local fakeUserName = nil
+local pendingFakeClaimAt = nil
 
 -- /kmax lose: for testing in game, the meter is read as if someone with a
 -- hidden name had passed you, until combat ends or /kmax lose off.
 local simulatedLoss = false
-local SIMULATED_THIEF = {} -- stands in for the hidden name; never shown
-local pendingFakeClaimAt = nil
 
-local function SendPendingFakeClaim()
-	local ago = GetTime() - pendingFakeClaimAt
-	if ago > TOP_CLAIM_GIVE_UP then
-		pendingFakeClaimAt = nil
-		return
-	end
-	local message = string.format("FAKETOP:%s:%.1f", fakeUserName, ago)
-	if SendComm(message, UnitName("player")) then pendingFakeClaimAt = nil end
-end
+-- The top row's name when the meter won't give it (hidden, or missing).
+local HIDDEN_NAME = {}
 
 -- The K-Maxing user who claimed #1 since we were last seen there, if any.
 local function TakeRecentTopClaimer()
@@ -310,6 +310,7 @@ local function AmITopDamage()
 
 	local topName, topIsLocal = GetTopDamagePlayerName()
 	if topIsLocal == nil then return false end -- no rows, or can't tell
+	if topName == nil or (issecretvalue and issecretvalue(topName)) then topName = HIDDEN_NAME end
 	return topIsLocal and true or false, topName
 end
 
@@ -988,9 +989,10 @@ local function OnLostTop(newTopName)
 	-- they took #1 (see TakeRecentTopClaimer), or, if their message is held
 	-- back by a lockdown, whoever tells us later (see OnTopClaim). Out of
 	-- combat the meter's own name is used as before.
-	local hidden = newTopName == SIMULATED_THIEF
-		or (newTopName ~= nil and issecretvalue and issecretvalue(newTopName))
-	if wasTop and hidden and fakeUserName then pendingFakeClaimAt = GetTime() end
+	local hidden = newTopName == HIDDEN_NAME
+	-- With /kmax fake on, any loss to another player counts, named or not.
+	local unexplained = wasTop and newTopName ~= nil and (hidden or fakeUserName ~= nil)
+	if unexplained and fakeUserName then pendingFakeClaimAt = GetTime() end
 	local thief
 	if newTopName ~= nil and not hidden then
 		thief = balenciagaUsers[newTopName] and newTopName
@@ -998,11 +1000,15 @@ local function OnLostTop(newTopName)
 	else
 		thief = TakeRecentTopClaimer()
 	end
+	Debug("lost #1 (was showing: " .. tostring(wasTop) .. "), new #1's name: "
+		.. (newTopName == nil and "none" or hidden and "hidden" or newTopName)
+		.. ", thief: " .. tostring(thief or "unknown"))
 	if wasTop and thief then
 		TriggerBalenciagaStolen(thief)
 	else
-		if wasTop and hidden then
+		if unexplained then
 			pendingSteal = { lostAt = GetTime(), seenTop = lastSeenTopTime }
+			Debug("waiting for a claim from whoever took #1")
 		end
 		StartFadeOut(FADE_OUT_DURATION)
 	end
@@ -1010,17 +1016,36 @@ end
 
 -- Another K-Maxing user says they took #1 at claimTime.
 local function OnTopClaim(name, claimTime)
+	Debug(string.format("%s claims #1 from %.1fs ago", name, GetTime() - claimTime))
 	lastTopClaimName, lastTopClaimTime = name, claimTime
 	local steal = pendingSteal
 	if not steal or isCurrentlyTop then return end
 	if steal.expiresAt and GetTime() > steal.expiresAt then
 		pendingSteal = nil
+		Debug("claim came too long after combat; ignored")
 		return
 	end
 	if ClaimFits(claimTime, steal.seenTop, steal.lostAt) then
 		pendingSteal = nil
 		lastTopClaimName = nil
 		TriggerBalenciagaStolen(name)
+	else
+		Debug("claim doesn't line up with when you lost #1; ignored")
+	end
+end
+
+local function SendPendingFakeClaim()
+	local ago = GetTime() - pendingFakeClaimAt
+	if ago > TOP_CLAIM_GIVE_UP then
+		pendingFakeClaimAt = nil
+		return
+	end
+	local inGroup = (IsInRaid and IsInRaid()) or (IsInGroup and IsInGroup())
+	local message = string.format("FAKETOP:%s:%.1f", fakeUserName, ago)
+	if SendComm(message, not inGroup and UnitName("player") or nil) then
+		pendingFakeClaimAt = nil
+		balenciagaUsers[fakeUserName] = true
+		OnTopClaim(fakeUserName, GetTime() - ago)
 	end
 end
 
@@ -1139,6 +1164,11 @@ end)
 SLASH_KMAX1 = "/kmax"
 SlashCmdList["KMAX"] = function(msg)
 	local command, rest = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
+	if command:lower() == "debug" then
+		debugOn = not debugOn
+		print("|cffff69b4K-Maxing:|r debug log " .. (debugOn and "on" or "off") .. ".")
+		return
+	end
 	if command:lower() == "lose" then
 		simulatedLoss = rest:lower() ~= "off"
 		if not simulatedLoss then
@@ -1244,14 +1274,6 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 		elseif msg == "PONG" then
 			local senderShort = (sender:match("([^-]+)")) or sender
 			balenciagaUsers[senderShort] = true
-		elseif msg:find("^FAKETOP:") then
-			-- Only our own /kmax fake test can send this.
-			local senderShort = (sender:match("([^-]+)")) or sender
-			local name, ago = msg:match("^FAKETOP:([^:]+):([%d.]+)$")
-			if senderShort == UnitName("player") and name then
-				balenciagaUsers[name] = true
-				OnTopClaim(name, GetTime() - tonumber(ago))
-			end
 		elseif msg == "TOP" or msg:find("^TOP:") then
 			local senderShort = (sender:match("([^-]+)")) or sender
 			if senderShort ~= UnitName("player") then
@@ -1286,7 +1308,7 @@ ticker:SetScript("OnUpdate", function(self, elapsed)
 	end
 
 	local amTop, topPlayerName = AmITopDamage()
-	if simulatedLoss and amTop then amTop, topPlayerName = false, SIMULATED_THIEF end
+	if simulatedLoss and amTop then amTop, topPlayerName = false, HIDDEN_NAME end
 
 	-- Tell other K-Maxing users the moment we take #1, so they can name us.
 	if amTop and not wasPollTop then

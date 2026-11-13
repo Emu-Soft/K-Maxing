@@ -62,6 +62,7 @@ Lose the top spot for more than a moment and the timer freezes in red while the 
 | `/kmax` | Open the options. |
 | `/kmax fake <name>` | Testing: pretend `<name>` runs K-Maxing and takes #1 from you every time you lose it, so you can try the steal banner with a group that doesn't have the addon. `/kmax fake off` stops it. |
 | `/kmax lose` | Testing: in a dungeon fight while you're #1, pretend someone passed you on the meter, until combat ends. `/kmax lose off` stops it early. Pair it with `/kmax fake <name>` to try the steal banner on your own. |
+| `/kmax debug` | Print each step of working out who took #1 (lost #1, sends, claims). Type it again to turn it off. |
 | `/bmdiag` | Print what K-Maxing can see of the damage meter. Handy when it isn't triggering: run it mid-fight in a dungeon. |
 
 ## Options (`/kmax`)
