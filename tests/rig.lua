@@ -15,6 +15,11 @@
 --   plainNames     true: meter names are readable even in combat
 --   noNames        true: meter rows have no name at all
 --   solo           true: not in a group (only whispers go out)
+--   secretClass    true: the meter's class column is secret too
+--
+-- Group: every client is in the party, plus players added with
+-- world:AddPlayer(name, class) who don't run K-Maxing. Classes default to
+-- one each from CLASSES; anyone else on the meter is a DRUID.
 --
 -- Each client records: texts (every SetText), sent (messages that went out),
 -- attempts (send calls, including refused ones) and music (PlayMusic calls).
@@ -50,6 +55,8 @@ local gameString = setmetatable({
 		return anySecret and Rig.Secret(text) or text
 	end,
 }, { __index = string })
+
+local CLASSES = { "MAGE", "PRIEST", "ROGUE", "WARRIOR", "HUNTER" }
 
 -- The result codes the rig's SendAddonMessage returns.
 local SEND_RESULT = { Success = 0, AddonMessageThrottle = 3, AddonMessageLockdown = 11 }
@@ -129,7 +136,15 @@ function Rig.NewWorld(corePath, options)
 		world.queue = keep
 	end
 
-	function world:AddClient(name)
+	world.party, world.classOf = {}, {}
+
+	function world:AddPlayer(name, class)
+		self.party[#self.party + 1] = name
+		self.classOf[name] = class or CLASSES[#self.party]
+	end
+
+	function world:AddClient(name, class)
+		self:AddPlayer(name, class)
 		local c = { name = name, frames = {}, texts = {}, rows = {}, sent = {}, attempts = 0, music = 0 }
 		-- Named child frames from templates (e.g. a slider's "...Low" label) exist on demand.
 		local env = setmetatable({}, { __index = function(_, k)
@@ -156,6 +171,24 @@ function Rig.NewWorld(corePath, options)
 		env.SlashCmdList = {}
 		env.Enum = { SendAddonMessageResult = SEND_RESULT }
 		env.UnitName = function(unit) if unit == "player" then return name end end
+		env.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
+		-- "partyN" is the Nth other group member.
+		local function UnitPlayer(unit)
+			if unit == "player" then return name end
+			local n = tonumber(unit:match("^party(%d)$") or "")
+			if not n then return nil end
+			for _, other in ipairs(world.party) do
+				if other ~= name then
+					n = n - 1
+					if n == 0 then return other end
+				end
+			end
+		end
+		env.UnitExists = function(unit) return UnitPlayer(unit) ~= nil end
+		env.UnitClass = function(unit)
+			local who = UnitPlayer(unit)
+			if who then return world.classOf[who], world.classOf[who] end
+		end
 		env.UnitAffectingCombat = function() return world.combat end
 		env.IsInInstance = function() return true, "party" end
 		env.IsInRaid = function() return false end
@@ -214,6 +247,8 @@ function Rig.NewWorld(corePath, options)
 				name = shownName,
 				sourceGUID = guid,
 				isLocalPlayer = (c.name == topName),
+				classFilename = opts.secretClass and Rig.Secret(self.classOf[topName] or "DRUID")
+					or (self.classOf[topName] or "DRUID"),
 			} }
 		end
 	end

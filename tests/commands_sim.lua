@@ -107,7 +107,7 @@ end
 -- The player who passes you has a readable name (or none at all) on the meter.
 do
 	local world, kain, inCombat = Pull({ plainNames = true }, "fake Emu")
-	t.Check(inCombat == "Other has stolen your Balenciaga", "readable names: the meter's name wins over the fake user")
+	t.Check(inCombat == nil, "readable names: the meter says Other doesn't run K-Maxing, so no banner")
 	NoErrors(world, "readable names")
 	world, kain, inCombat = Pull({ noNames = true }, "fake Emu")
 	t.Check(inCombat == FAKE_STOLE, "no names on the meter: the fake user is still named")

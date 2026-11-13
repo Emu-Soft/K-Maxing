@@ -1,9 +1,10 @@
 -- Simulates Blizzard's dungeon lockdown on WoW: Forever: in combat the meter
 -- hides names, and addon messages can be refused (a lockdown result code, or
 -- a Lua error), arrive late, or come from a hidden sender. Checks that the
--- #1 display still works, that the banner names the thief from the meter
--- during the fight, and that when the meter gives no name, a K-Maxing claim
--- names them as soon as it gets through, never naming the wrong player.
+-- #1 display still works, that the banner names a K-Maxing thief from the
+-- meter during the fight (the class column says they run K-Maxing), and
+-- that when the meter can't settle it, a K-Maxing claim names them as soon
+-- as it gets through, never naming the wrong player.
 --
 --   lua5.1 tests/lockdown_sim.lua [path to Maxing_Core.lua]
 
@@ -43,7 +44,6 @@ for _, case in ipairs({
 	{ "open", {} },
 	{ "refused", { lockdown = InCombat } },
 	{ "error", { lockdown = InCombat, lockdownMode = "error" } },
-	{ "hidden sender", { lockdown = InCombat, secretSender = true } },
 	{ "hidden index", { lockdown = InCombat, indexSecret = true } },
 }) do
 	local label, options = case[1], case[2]
@@ -53,9 +53,23 @@ for _, case in ipairs({
 	NoErrors(world, label)
 end
 do
-	local world, kain, _, inCombat = Pull({ lockdown = InCombat }, "Outsider")
-	t.Check(inCombat == "Outsider has stolen your Balenciaga", "outsider: named during the fight, no K-Maxing needed")
+	local world, kain = Pull({ lockdown = InCombat }, "Outsider")
+	t.Check(Rig.StolenText(kain) == nil, "outsider: no banner")
 	NoErrors(world, "outsider")
+end
+do
+	-- Hidden senders: nobody can say hello, so nobody is known to run K-Maxing.
+	local world, kain = Pull({ secretSender = true }, "Emu")
+	t.Check(Rig.StolenText(kain) == nil, "hidden sender: no banner")
+	NoErrors(world, "hidden sender")
+end
+
+print("-- the class can't settle it: a K-Maxing claim names the thief")
+do
+	local world, kain, _, inCombat = Pull({ lockdown = InCombat, secretClass = true }, "Emu")
+	t.Check(inCombat == nil, "hidden class, lockdown: nothing during the fight")
+	t.Check(Rig.StolenText(kain) == EMU_STOLE, "hidden class, lockdown: Kain sees Emu named once combat ends")
+	NoErrors(world, "hidden class")
 end
 
 print("-- the meter gives no name: a K-Maxing claim names the thief")

@@ -9,11 +9,8 @@ Newest first. Each version has up to three sections: New, Changed, Fixed. The re
 - `/kmax debug` prints each step of working out who took #1.
 - `/kmax lose [name]` pretends someone passed you on the meter until combat ends, so you can test losing #1 on your own. `/kmax lose off` stops it early.
 
-### Changed
-- Avada Balenciaga now names whoever takes #1 from you, not just K-Maxing users.
-
 ### Fixed
-- Avada Balenciaga now names the thief in combat, dungeon lockdown included. The name comes straight from the damage meter.
+- Avada Balenciaga now names the thief in combat, dungeon lockdown included. The name comes straight from the damage meter, and its class column tells K-Maxing users apart from everyone else.
 - Taking #1 while the game is holding addon messages back no longer stops the music from starting.
 
 ## 1.0.1
