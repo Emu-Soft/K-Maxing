@@ -157,6 +157,19 @@ local function IsKMaxingClass(class)
 	return users >= inGroup and "yes" or "unsure"
 end
 
+-- The K-Maxing user of this class, when there is exactly one. Their name
+-- came from their own hello out of combat, so it is plain and can't be us.
+local function OnlyKMaxingUserOfClass(class)
+	local found
+	for userName, userClass in pairs(kmUsers) do
+		if userClass == class then
+			if found then return nil end
+			found = userName
+		end
+	end
+	return found
+end
+
 -- Who took #1, told by the mod itself: the backup for when the meter's row
 -- has no name at all. Each K-Maxing user can see whether they themselves are
 -- #1 (the meter's isLocalPlayer flag stays readable), so whoever takes #1
@@ -314,7 +327,21 @@ local function GetMeterDataProvider()
 	return provider
 end
 
-local function GetTopDamagePlayerName()
+-- The current fight's damage rows straight from the game, already ranked
+-- (row 1 = top), the way Details! reads them on Forever. Doesn't need the
+-- meter window open, and the rows are the game's own, not the window's.
+local function GetSessionTopSource()
+	if not (C_DamageMeter and C_DamageMeter.GetCombatSessionFromType) then return nil end
+	local sessionTypes, meterTypes = Enum and Enum.DamageMeterSessionType, Enum and Enum.DamageMeterType
+	local current = sessionTypes and sessionTypes.Current or 1
+	local damageDone = meterTypes and meterTypes.DamageDone or 0
+	local ok, session = pcall(C_DamageMeter.GetCombatSessionFromType, current, damageDone)
+	if not ok or type(session) ~= "table" or type(session.combatSources) ~= "table" then return nil end
+	return session.combatSources[1]
+end
+
+-- The meter window's top row: the fallback when the session API is missing.
+local function GetWindowTopEntry()
 	local provider = GetMeterDataProvider()
 	if not provider or type(provider.Enumerate) ~= "function" then return nil end
 
@@ -328,10 +355,6 @@ local function GetTopDamagePlayerName()
 	-- with index 1 -- or, if index is ever missing, the first row in the
 	-- provider's order, which is the displayed order -- and ask whether it's
 	-- us. No amounts are compared at all.
-	--
-	-- Returns: topName (may be a SECRET string in combat -- only display it,
-	-- never compare/index with it), topIsLocal (true/false, or nil if
-	-- unknown).
 	local topEntry, firstEntry
 	local ok = pcall(function()
 		for _, entry in provider:Enumerate() do
@@ -344,7 +367,14 @@ local function GetTopDamagePlayerName()
 		end
 	end)
 	if not ok then return nil end
-	topEntry = topEntry or firstEntry
+	return topEntry or firstEntry
+end
+
+-- Returns: topName (may be a SECRET string in combat -- only display it,
+-- never compare/index with it), topIsLocal (true/false, or nil if
+-- unknown), the row's GUID (may be SECRET too) and class (nil if hidden).
+local function GetTopDamagePlayerName()
+	local topEntry = GetSessionTopSource() or GetWindowTopEntry()
 	if not topEntry then return nil end
 	local isLocal = topEntry.isLocalPlayer
 	if isLocal ~= nil and issecretvalue and issecretvalue(isLocal) then isLocal = nil end
@@ -353,13 +383,25 @@ local function GetTopDamagePlayerName()
 	return topEntry.name, isLocal, topEntry.sourceGUID, class
 end
 
+-- Whether a readable name is our own character (with or without the realm).
+local function IsOwnName(name)
+	if type(name) ~= "string" or (issecretvalue and issecretvalue(name)) then return false end
+	return (name:match("^[^-]+") or name) == UnitName("player")
+end
+
 -- The name to show for a meter row, without the realm. Like the name itself,
 -- it may be a SECRET string: the game will draw it, but we can't read it.
 -- (UnitNameFromGUID takes the row's GUID even when that is secret too.)
+-- This row is never us, so a readable answer that names us is wrong and
+-- is dropped.
 local function MeterDisplayName(name, guid)
+	if IsOwnName(name) then name = nil end
+	if type(name) == "string" and not (issecretvalue and issecretvalue(name)) then
+		return name:match("^[^-]+") or name
+	end
 	if guid and UnitNameFromGUID then
 		local ok, shortName = pcall(UnitNameFromGUID, guid)
-		if ok and shortName then return shortName end
+		if ok and shortName and not IsOwnName(shortName) then return shortName end
 	end
 	return name
 end
@@ -1077,7 +1119,9 @@ local function OnLostTop(newTopName, newTopClass, pretendUser)
 	if unexplained and fakeUserName then pendingFakeClaimAt = GetTime() end
 	local thief
 	if isUser == "yes" then
-		thief = newTopName
+		-- When one K-Maxing user plays that class, name them from the list:
+		-- a plain name that can't be ours. The meter's name is for two of a kind.
+		thief = (secret and newTopClass and OnlyKMaxingUserOfClass(newTopClass)) or newTopName
 		lastTopClaimName = nil
 	elseif isUser == "unsure" then
 		thief = TakeRecentTopClaimer()
@@ -1525,6 +1569,17 @@ local function RunMeterDiagnostic()
 			end
 		end)
 		DiagPrint("rows: " .. count .. (okEnum and "" or ("  |cffff5555enumerate errored:|r " .. tostring(enumErr))))
+	end
+
+	-- 4b. The game's own ranked rows (what the addon reads first).
+	local okSession, top = pcall(GetSessionTopSource)
+	if not okSession then
+		DiagPrint("|cffff5555session top row errored:|r " .. tostring(top))
+	elseif not top then
+		DiagPrint("session top row: NOT AVAILABLE (falls back to the window)")
+	else
+		DiagPrint(string.format("session top row: name=%s sourceGUID=%s class=%s isLocalPlayer=%s",
+			DiagState(top.name), DiagState(top.sourceGUID), DiagState(top.classFilename), DiagState(top.isLocalPlayer)))
 	end
 
 	-- 5. The ranking itself, WITHOUT the swallowing pcall's silence.

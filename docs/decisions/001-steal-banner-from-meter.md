@@ -28,6 +28,22 @@ strips the realm with `UnitNameFromGUID(guid)`, which accepts a secret GUID.
   until the fight ends. No banner after the fight (Kain: "We don't need a
   banner after the fight").
 
+## Update 2026-11-19: never name the player who lost #1
+
+In game, 1.1.0 named Kain on every steal. The rig only ever had one meter
+row and never showed it. The name now comes from:
+
+- The game's ranked rows, `C_DamageMeter.GetCombatSessionFromType(Current,
+  DamageDone).combatSources[1]`, as Details! reads them. The meter window
+  (`DamageMeterSessionWindow1`) is only the fallback.
+- The K-Maxing user list when one user in the group plays the thief's
+  class. That name is plain and can never be ours (our own hello is ignored).
+- The meter's name only for two K-Maxing users of the same class. A
+  readable answer (row name or `UnitNameFromGUID`) that is our own name is
+  dropped, since that row is never us.
+
+`tests/self_name_sim.lua` covers each way the meter could hand back our name.
+
 ## Not chosen
 
 - Banner for anyone who takes #1 (Kain's first pick, reversed the same day).

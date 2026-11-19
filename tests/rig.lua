@@ -16,6 +16,11 @@
 --   noNames        true: meter rows have no name at all
 --   solo           true: not in a group (only whispers go out)
 --   secretClass    true: the meter's class column is secret too
+--   noSessionAPI   true: no C_DamageMeter.GetCombatSessionFromType, so only
+--                  the meter window can be read
+--   windowShowsSelf  true: the meter window's rows carry the viewer's own
+--                  name and GUID (the "always names me" report)
+--   guidNameIsSelf true: UnitNameFromGUID answers with the viewer's own name
 --
 -- Group: every client is in the party, plus players added with
 -- world:AddPlayer(name, class) who don't run K-Maxing. Classes default to
@@ -156,6 +161,7 @@ function Rig.NewWorld(corePath, options)
 		env.string = gameString
 		-- Takes a (secret) GUID, gives the name without the realm, as secret as the GUID.
 		env.UnitNameFromGUID = function(guid)
+			if opts.guidNameIsSelf then return name end
 			local plain = IsSecret(guid) and rawget(guid, "value") or guid
 			local short = plain:match("^Player%-(.+)$")
 			return IsSecret(guid) and Rig.Secret(short) or short
@@ -198,7 +204,15 @@ function Rig.NewWorld(corePath, options)
 			SendAddonMessage = function(prefix, msg, channel, target) return Send(c, prefix, msg, channel, target) end,
 		}
 		env.C_DamageMeter = { IsDamageMeterAvailable = function() return true end }
-		local provider = { Enumerate = function() return ipairs(c.rows) end }
+		if not opts.noSessionAPI then
+			env.Enum.DamageMeterSessionType = { Overall = 0, Current = 1 }
+			env.Enum.DamageMeterType = { DamageDone = 0 }
+			env.C_DamageMeter.GetCombatSessionFromType = function(sessionType, meterType)
+				if sessionType ~= 1 or meterType ~= 0 then return nil end
+				return { combatSources = c.rows }
+			end
+		end
+		local provider = { Enumerate = function() return ipairs(c.windowRows or c.rows) end }
 		local scrollBox = {
 			HasDataProvider = function() return true end,
 			GetDataProvider = function() return provider end,
@@ -227,29 +241,39 @@ function Rig.NewWorld(corePath, options)
 		return c
 	end
 
-	-- Every client's meter shows `topName` at #1. Names are secret in combat
-	-- (and out of it with secretOutOfCombat); each client sees only whether
-	-- the top row is itself.
+	-- Every client's meter shows `topName` at #1, then the rest of the group.
+	-- Names are secret in combat (and out of it with secretOutOfCombat); each
+	-- client sees only which row is itself.
 	function world:SetTop(topName)
 		self.top = topName
-		for _, c in ipairs(self.clients) do
-			local hidden = (self.combat or opts.secretOutOfCombat) and not opts.plainNames
-			local shownName = topName
+		local order = { topName }
+		for _, other in ipairs(self.party) do
+			if other ~= topName then order[#order + 1] = other end
+		end
+		local hidden = (self.combat or opts.secretOutOfCombat) and not opts.plainNames
+		local function Row(c, rank, who, shownAs)
 			-- Party members' names come with their realm; the GUID gives the short name.
-			local shownName, guid = topName .. "-Realm", "Player-" .. topName
+			local shownName, guid = shownAs .. "-Realm", "Player-" .. shownAs
 			if opts.noNames then
 				shownName, guid = nil, nil
 			elseif hidden then
 				shownName, guid = Rig.Secret(shownName), Rig.Secret(guid)
 			end
-			c.rows = { {
-				index = opts.indexSecret and Rig.Secret(1) or 1,
+			return {
+				index = opts.indexSecret and Rig.Secret(rank) or rank,
 				name = shownName,
 				sourceGUID = guid,
-				isLocalPlayer = (c.name == topName),
-				classFilename = opts.secretClass and Rig.Secret(self.classOf[topName] or "DRUID")
-					or (self.classOf[topName] or "DRUID"),
-			} }
+				isLocalPlayer = (c.name == who),
+				classFilename = opts.secretClass and Rig.Secret(self.classOf[who] or "DRUID")
+					or (self.classOf[who] or "DRUID"),
+			}
+		end
+		for _, c in ipairs(self.clients) do
+			c.rows, c.windowRows = {}, opts.windowShowsSelf and {} or nil
+			for rank, who in ipairs(order) do
+				c.rows[rank] = Row(c, rank, who, who)
+				if c.windowRows then c.windowRows[rank] = Row(c, rank, who, c.name) end
+			end
 		end
 	end
 
