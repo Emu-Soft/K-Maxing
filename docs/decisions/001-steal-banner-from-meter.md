@@ -50,6 +50,22 @@ every message from us is dropped first (`IsMe`).
 
 `tests/self_name_sim.lua` covers each way the meter could hand back our name.
 
+## Update 2026-11-19: anyone who takes #1 (Kain's choice)
+
+Kain's test group had no other K-Maxing users, so no steal ever showed.
+The banner now names anyone who passes us:
+
+- Readable meter name: shown as is (realm cut off).
+- Hidden name, readable class, one other group member of that class: that
+  member's name from the group list. Party names are secret in a dungeon
+  fight too, so the list keeps the last readable names (refreshed on
+  zoning, roster changes and after each fight).
+- Two of that class, or hidden class: the meter's hidden name.
+- No name at all: a K-Maxing user's claim, as before.
+
+The K-Maxing class matching is gone. The USER hello is still sent because
+1.0.1 and 1.1.0 clients only name players who said it.
+
 ## Not chosen
 
 - Banner for anyone who takes #1 (Kain's first pick, reversed the same day).

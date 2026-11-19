@@ -148,6 +148,7 @@ function Rig.NewWorld(corePath, options)
 	function world:AddPlayer(name, class)
 		self.party[#self.party + 1] = name
 		self.classOf[name] = class or CLASSES[#self.party]
+		for _, c in ipairs(self.clients) do Fire(c, "GROUP_ROSTER_UPDATE") end
 	end
 
 	function world:AddClient(name, class)
@@ -178,7 +179,6 @@ function Rig.NewWorld(corePath, options)
 		end
 		env.SlashCmdList = {}
 		env.Enum = { SendAddonMessageResult = SEND_RESULT }
-		env.UnitName = function(unit) if unit == "player" then return name end end
 		env.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 		-- "partyN" is the Nth other group member.
 		local function UnitPlayer(unit)
@@ -193,6 +193,12 @@ function Rig.NewWorld(corePath, options)
 			end
 		end
 		env.UnitExists = function(unit) return UnitPlayer(unit) ~= nil end
+		-- Other group members' names are secret in a dungeon fight, like the meter's.
+		env.UnitName = function(unit)
+			local who = UnitPlayer(unit)
+			if who and unit ~= "player" and world.combat and not opts.plainNames then return Rig.Secret(who) end
+			return who
+		end
 		env.UnitClass = function(unit)
 			local who = UnitPlayer(unit)
 			if who then return world.classOf[who], world.classOf[who] end

@@ -67,7 +67,7 @@ do
 	t.Check(Rig.StolenText(k) == "Emu has stolen your Balenciaga", "same class as Kain: Emu is named (got: " .. tostring(Rig.StolenText(k)) .. ")")
 end
 
--- A rogue without K-Maxing passes a rogue Kain: no banner, and never Kain.
+-- A rogue without K-Maxing passes a rogue Kain: the rogue is named, never Kain.
 for _, opts in ipairs({ space, spaceLockdown }) do
 	local w = Rig.NewWorld(CORE, opts)
 	local k = w:AddClient("Kain", "ROGUE")
@@ -78,8 +78,31 @@ for _, opts in ipairs({ space, spaceLockdown }) do
 	w:SetTop("Stranger")
 	w:Run(3)
 	local text = Rig.StolenText(k)
-	t.Check(text == nil, "rogue without K-Maxing passes rogue Kain" .. (opts.lockdown and ", lockdown" or "")
-		.. ": no banner (got: " .. tostring(text) .. ")")
+	t.Check(text == "Stranger has stolen your Balenciaga", "rogue without K-Maxing passes rogue Kain"
+		.. (opts.lockdown and ", lockdown" or "") .. ": Stranger is named (got: " .. tostring(text) .. ")")
+end
+
+-- Kain's test on 2026-11-19: he's the only K-Maxing user. A rogue passes him,
+-- he takes #1 back, then a warrior passes him. Names hidden, lockdown on.
+do
+	local w = Rig.NewWorld(CORE, spaceLockdown)
+	local k = w:AddClient("Kain", "MAGE")
+	w:AddPlayer("Knome", "ROGUE")
+	w:AddPlayer("Brock", "WARRIOR")
+	w:AddPlayer("Gumbis", "PRIEST")
+	w:SetCombat(true)
+	w:SetTop("Kain")
+	w:Run(2)
+	w:SetTop("Knome")
+	w:Run(3)
+	t.Check(Rig.StolenText(k) == "Knome has stolen your Balenciaga", "Kain's test: the rogue is named (got: " .. tostring(Rig.StolenText(k)) .. ")")
+	w:ClearTexts()
+	w:SetTop("Kain")
+	w:Run(6)
+	w:SetTop("Brock")
+	w:Run(3)
+	t.Check(Rig.StolenText(k) == "Brock has stolen your Balenciaga", "Kain's test: the warrior is named (got: " .. tostring(Rig.StolenText(k)) .. ")")
+	t.Check(#w.errors == 0, "Kain's test: no Lua errors" .. (w.errors[1] and (": " .. w.errors[1]) or ""))
 end
 
 t.Finish()

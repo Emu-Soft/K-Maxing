@@ -1,10 +1,10 @@
 -- Simulates Blizzard's dungeon lockdown on WoW: Forever: in combat the meter
 -- hides names, and addon messages can be refused (a lockdown result code, or
 -- a Lua error), arrive late, or come from a hidden sender. Checks that the
--- #1 display still works, that the banner names a K-Maxing thief from the
--- meter during the fight (the class column says they run K-Maxing), and
--- that when the meter can't settle it, a K-Maxing claim names them if it
--- gets through before the fight ends, never naming the wrong player.
+-- #1 display still works, that the banner names whoever took #1 during the
+-- fight (from the group list by the meter's class column, or the meter's own
+-- hidden name), and that when the meter gives neither, a K-Maxing claim names
+-- them if it gets through before the fight ends, never naming the wrong player.
 --
 --   lua5.1 tests/lockdown_sim.lua [path to Maxing_Core.lua]
 
@@ -53,28 +53,35 @@ for _, case in ipairs({
 	NoErrors(world, label)
 end
 do
-	local world, kain = Pull({ lockdown = InCombat }, "Outsider")
-	t.Check(Rig.StolenText(kain) == nil, "outsider: no banner")
+	local world, kain, _, inCombat = Pull({ lockdown = InCombat }, "Outsider")
+	t.Check(inCombat == "Outsider has stolen your Balenciaga", "outsider: named from the meter during the fight")
 	NoErrors(world, "outsider")
 end
 do
-	-- Hidden senders: nobody can say hello, so nobody is known to run K-Maxing.
-	local world, kain = Pull({ secretSender = true }, "Emu")
-	t.Check(Rig.StolenText(kain) == nil, "hidden sender: no banner")
+	-- Hidden senders: messages don't matter, the group list names Emu.
+	local world, _, _, inCombat = Pull({ secretSender = true }, "Emu")
+	t.Check(inCombat == EMU_STOLE, "hidden sender: Emu named during the fight")
 	NoErrors(world, "hidden sender")
 end
 
-print("-- the class can't settle it: a K-Maxing claim names the thief")
+print("-- the class is hidden: the meter's own hidden name is used")
 do
-	local world, kain, _, inCombat = Pull({ lockdown = InCombat, secretClass = true }, "Emu")
-	t.Check(inCombat == nil, "hidden class, lockdown: nothing during the fight")
-	t.Check(Rig.StolenText(kain) == nil, "hidden class, lockdown: no banner after the fight either")
+	local world, _, _, inCombat = Pull({ lockdown = InCombat, secretClass = true }, "Emu")
+	t.Check(inCombat == EMU_STOLE, "hidden class, lockdown: Emu named during the fight")
 	NoErrors(world, "hidden class")
 end
 
-print("-- the meter gives no name: a K-Maxing claim names the thief")
+print("-- the meter gives no name, but the class: the group list names the thief")
+do
+	local world, _, _, inCombat = Pull({ lockdown = InCombat, noNames = true }, "Emu")
+	t.Check(inCombat == EMU_STOLE, "no names, class shown, lockdown: Emu named during the fight")
+	NoErrors(world, "no names, class shown")
+end
+
+print("-- the meter gives no name or class: a K-Maxing claim names the thief")
 local function NoNames(options)
 	options.noNames = true
+	options.secretClass = true
 	return options
 end
 do

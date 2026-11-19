@@ -135,50 +135,53 @@ local function IsMe(name)
 	return me ~= nil and ShortName(name) == ShortName(me)
 end
 
--- Who in the group runs K-Maxing, and their class: { [name] = "MAGE" }.
--- Filled out of combat by "USER:<class>" messages, emptied on zoning.
-local kmUsers = {}
-
 local function PlayerClass()
 	local _, class = UnitClass("player")
 	return class
 end
 
+-- Says hello to K-Maxing users in the group. 1.0.1 and 1.1.0 only name
+-- players who did, so we still send it.
 local function BroadcastPresence()
 	SendComm("PING")
 	SendComm("USER:" .. (PlayerClass() or "?"))
 end
 
--- Whether the player now at #1 runs K-Maxing, from the meter's class column
--- (readable in combat, unlike the name): "yes" when every other group member
--- of that class runs it, "no" when none does, "unsure" otherwise.
-local function IsKMaxingClass(class)
-	if not class then return "unsure" end
-	local users = 0
-	for _, userClass in pairs(kmUsers) do
-		if userClass == class then users = users + 1 end
-	end
-	if users == 0 then return "no" end
-	local inGroup = 0
+-- The rest of the group and their classes: { [name] = "ROGUE" }. Names are
+-- SECRET in a dungeon fight, so this keeps the last readable ones.
+local groupClasses = {}
+
+local function RefreshGroupClasses()
+	local fresh, complete = {}, true
 	for i = 1, 4 do
 		local unit = "party" .. i
 		if UnitExists and UnitExists(unit) then
+			local unitName = UnitName(unit)
 			local _, unitClass = UnitClass(unit)
-			if unitClass == nil or (issecretvalue and issecretvalue(unitClass)) then return "unsure" end
-			if unitClass == class then inGroup = inGroup + 1 end
+			local readable = type(unitName) == "string" and type(unitClass) == "string"
+				and not (issecretvalue and (issecretvalue(unitName) or issecretvalue(unitClass)))
+			if readable then
+				if not IsMe(unitName) then fresh[ShortName(unitName)] = unitClass end
+			else
+				complete = false
+			end
 		end
 	end
-	return users >= inGroup and "yes" or "unsure"
+	if complete then
+		groupClasses = fresh
+	else
+		for unitName, unitClass in pairs(fresh) do groupClasses[unitName] = unitClass end
+	end
 end
 
--- The K-Maxing user of this class, when there is exactly one. Their name
--- came from their own hello out of combat, so it is plain and can't be us.
-local function OnlyKMaxingUserOfClass(class)
+-- The one other group member of this class, if there is exactly one. The
+-- name is plain and, since we're left out, can never be ours.
+local function OnlyGroupMemberOfClass(class)
 	local found
-	for userName, userClass in pairs(kmUsers) do
-		if userClass == class then
+	for memberName, memberClass in pairs(groupClasses) do
+		if memberClass == class then
 			if found then return nil end
-			found = userName
+			found = memberName
 		end
 	end
 	return found
@@ -1084,9 +1087,8 @@ local function OnBecameTop()
 	end
 end
 
--- newTopClass: the new #1's class from the meter, if readable. pretendUser:
--- /kmax lose <name> treats its pretend #1 as a K-Maxing user.
-local function OnLostTop(newTopName, newTopClass, pretendUser)
+-- newTopClass: the new #1's class from the meter, if readable.
+local function OnLostTop(newTopName, newTopClass)
 	local wasTop = isCurrentlyTop
 	isCurrentlyTop = false
 
@@ -1102,42 +1104,34 @@ local function OnLostTop(newTopName, newTopClass, pretendUser)
 	headline:SetScale(1)
 	glowTexture:SetVertexColor(1, 1, 1, 0.8)
 
-	-- Only K-Maxing users steal Balenciaga. In combat the meter's name is a
-	-- SECRET string: we can't read it or look it up, but the banner can still
-	-- show it, and the meter's class column says whether that player runs
-	-- K-Maxing (see IsKMaxingClass). When the class can't settle it, or the
-	-- meter gives no name, a K-Maxing user's own claim names them (see
-	-- TakeRecentTopClaimer), which a lockdown may hold back until later (see
-	-- OnTopClaim). (A SECRET value is only ever truth-tested, never compared.)
+	-- Anyone who passes us steals Balenciaga. In combat the meter's name is
+	-- a SECRET string: the banner can show it, but we can't read it. So when
+	-- one other group member plays the new #1's class (the meter's class
+	-- column stays readable), we name them from the group list instead: a
+	-- plain name that can't be ours. The meter's own name is for two of a
+	-- kind. When the meter gives no name at all, a K-Maxing user's own claim
+	-- names them (see TakeRecentTopClaimer and OnTopClaim). (A SECRET value
+	-- is only ever truth-tested, never compared.)
 	local secret = issecretvalue and issecretvalue(newTopName)
 	local noName = not secret and newTopName == HIDDEN_NAME
-	local isUser
-	if not newTopName then
-		isUser = "no"
-	elseif pretendUser then
-		isUser = "yes"
-	elseif not secret and not noName then
-		isUser = kmUsers[newTopName] and "yes" or "no"
-	else
-		isUser = IsKMaxingClass(newTopClass)
-	end
-	if noName and isUser == "yes" then isUser = "unsure" end -- a user, but which one?
-
-	local unexplained = wasTop and (noName or isUser == "unsure")
-	if unexplained and fakeUserName then pendingFakeClaimAt = GetTime() end
+	if (secret or noName) and newTopClass then RefreshGroupClasses() end
+	local member = (secret or noName) and newTopClass and OnlyGroupMemberOfClass(newTopClass)
 	local thief, namedBy
-	if isUser == "yes" then
-		-- When one K-Maxing user plays that class, name them from the list:
-		-- a plain name that can't be ours. The meter's name is for two of a kind.
-		local listed = secret and newTopClass and OnlyKMaxingUserOfClass(newTopClass)
-		thief, namedBy = listed or newTopName, listed and "K-Maxing user list" or "meter"
-		lastTopClaimName = nil
-	elseif isUser == "unsure" then
+	if not newTopName then
+		thief = nil
+	elseif member then
+		thief, namedBy = member, "group list"
+	elseif not noName then
+		thief, namedBy = newTopName, "meter"
+	else
 		thief, namedBy = TakeRecentTopClaimer(), "their claim"
 	end
+	if thief then lastTopClaimName = nil end
+	local unexplained = wasTop and not thief and noName
+	if unexplained and fakeUserName then pendingFakeClaimAt = GetTime() end
 	local nameKind = secret and "hidden" or not newTopName and "none" or noName and "missing" or "readable"
 	Debug("lost #1 (was showing: " .. tostring(wasTop) .. "), new #1's name: " .. nameKind
-		.. ", class: " .. tostring(newTopClass or "unknown") .. ", runs K-Maxing: " .. isUser
+		.. ", class: " .. tostring(newTopClass or "unknown")
 		.. ", banner: " .. (thief and ("yes, named by " .. namedBy) or "no"))
 	if wasTop and thief then
 		TriggerBalenciagaStolen(thief)
@@ -1388,11 +1382,12 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 		simulatedLoss = false
 		pendingSteal, pendingClaimAt, pendingFakeClaimAt = nil, nil, nil
 		combatStartTime = nil
+		RefreshGroupClasses()
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		local inInstance, instanceType = IsInInstance()
 		inDungeon = inInstance and instanceType == "party"
 		pendingSteal = nil
-		wipe(kmUsers)
+		RefreshGroupClasses()
 
 		if isCurrentlyTop then
 			PlayMusic(LocalMusicPath())
@@ -1406,6 +1401,7 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 			lastPresenceAt = now
 			BroadcastPresence()
 		end
+		RefreshGroupClasses()
 
 	elseif event == "CHAT_MSG_ADDON" and prefix == COMM_PREFIX then
 		if issecretvalue and issecretvalue(sender) then return end
@@ -1416,8 +1412,6 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 		if msg == "PING" then
 			SendComm("PONG")
 			SendComm("USER:" .. (PlayerClass() or "?"))
-		elseif msg:find("^USER:") then
-			kmUsers[senderShort] = msg:match("^USER:(.+)$")
 		elseif msg == "TOP" or msg:find("^TOP:") then
 			local ago = tonumber(msg:match("^TOP:([%d.]+)$")) or 0
 			OnTopClaim(senderShort, GetTime() - ago)
@@ -1448,10 +1442,8 @@ ticker:SetScript("OnUpdate", function(self, elapsed)
 	end
 
 	local amTop, topPlayerName, topClass = AmITopDamage()
-	local pretendUser = false
 	if simulatedLoss and amTop then
 		amTop, topPlayerName, topClass = false, simulatedLoss, nil
-		pretendUser = simulatedLoss ~= HIDDEN_NAME
 	end
 
 	-- Tell other K-Maxing users the moment we take #1, so they can name us.
@@ -1471,7 +1463,7 @@ ticker:SetScript("OnUpdate", function(self, elapsed)
 		lostTopTimer = lostTopTimer + POLL_INTERVAL
 		if lostTopTimer >= LOST_TOP_THRESHOLD then
 			lostTopTimer = 0
-			OnLostTop(topPlayerName, topClass, pretendUser)
+			OnLostTop(topPlayerName, topClass)
 		end
 	end
 end)

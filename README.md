@@ -48,7 +48,7 @@ In a 5-player dungeon, the moment you become the **#1 damage dealer** on Forever
 
 Lose the top spot for more than a moment and the timer freezes in red while the music fades out.
 
-**Avada Balenciaga:** if the player who takes #1 from you also runs K-Maxing, you'll see *"<name> has stolen your Balenciaga"*, with a sound to match. Forever's damage meter hides names from addons in combat, but the game can still draw them, and the meter's class column shows whether the new #1 is one of your group's K-Maxing users. So the banner works mid-fight, dungeon lockdown included. If that can't settle it (say, two players of the same class, only one with K-Maxing), the K-Maxing user who took #1 tells the group themselves. If the game holds that message back until the fight is over, there is no banner.
+**Avada Balenciaga:** when anyone takes #1 from you, you'll see *"<name> has stolen your Balenciaga"*, with a sound to match. Forever's damage meter hides names from addons in combat, but its class column stays readable, so K-Maxing names the one player in your group with that class. With two of the same class, the game draws the meter's own hidden name. So the banner works mid-fight, dungeon lockdown included. If the meter shows no name or class at all, a K-Maxing user who took #1 tells the group themselves; if the game holds that message back until the fight is over, there is no banner.
 
 ### Good to know
 - It only works **inside 5-player dungeons**, and only reads Forever's own damage meter, so keep that meter turned on.
@@ -61,7 +61,7 @@ Lose the top spot for more than a moment and the timer freezes in red while the 
 |---|---|
 | `/kmax` | Open the options. |
 | `/kmax fake <name>` | Testing: pretend `<name>` runs K-Maxing and claims #1 every time you lose it. Only used when the meter gives no name, e.g. with `/kmax lose`. `/kmax fake off` stops it. |
-| `/kmax lose [name]` | Testing: in a dungeon fight while you're #1, pretend someone passed you on the meter, until combat ends. With a name, they count as a K-Maxing user and the banner names them. Without one, the meter seems to give no name, so `/kmax fake <name>` can try the backup path. `/kmax lose off` stops it early. |
+| `/kmax lose [name]` | Testing: in a dungeon fight while you're #1, pretend someone passed you on the meter, until combat ends. With a name, the banner names them. Without one, the meter seems to give no name, so `/kmax fake <name>` can try the backup path. `/kmax lose off` stops it early. |
 | `/kmax debug` | Print each step of working out who took #1 (lost #1, sends, claims). Type it again to turn it off. |
 | `/bmdiag` | Print what K-Maxing can see of the damage meter. Handy when it isn't triggering: run it mid-fight in a dungeon. |
 

@@ -1,8 +1,8 @@
 -- Simulates a 5-player dungeon with several K-Maxing clients sharing one
--- party channel, and checks that the steal banner names a K-Maxing user who
--- takes #1, straight from the damage meter, even though the meter hides every
--- name in combat on Forever (the banner hands the hidden name to the game to
--- draw, and the meter's class column says whether they run K-Maxing).
+-- party channel, and checks that the steal banner names whoever takes #1,
+-- K-Maxing or not, even though the meter hides every name in combat on
+-- Forever (the meter's class column picks them from the group list, or the
+-- banner hands the meter's hidden name to the game to draw).
 --
 --   lua5.1 tests/steal_sim.lua [path to Maxing_Core.lua]
 
@@ -34,7 +34,7 @@ t.Check(Rig.StolenText(emu) == "Kain has stolen your Balenciaga", "Emu sees Kain
 world:ClearTexts()
 world:SetTop("Outsider")
 world:Run(3)
-t.Check(Rig.StolenText(kain) == nil, "no banner for a player without K-Maxing")
+t.Check(Rig.StolenText(kain) == "Outsider has stolen your Balenciaga", "a player without K-Maxing is named too")
 
 -- 4. Combat ends while Kain holds #1: no steal.
 world:ClearTexts()
@@ -53,7 +53,7 @@ t.Check(#kain.sent - before == 1, "one claim message per time Kain takes #1")
 t.Check(#world.errors == 0, "no Lua errors" .. (world.errors[1] and (": " .. world.errors[1]) or ""))
 
 -- 6. A player without K-Maxing has the same class as Emu, so the class can't
--- tell them apart: only Emu's own claim names Emu.
+-- tell them apart: the meter's own hidden name says which.
 do
 	local w = Rig.NewWorld(CORE)
 	local k = w:AddClient("Kain")
@@ -64,12 +64,12 @@ do
 	w:Run(2)
 	w:SetTop("Twin")
 	w:Run(3)
-	t.Check(Rig.StolenText(k) == nil, "same class: no banner for the player without K-Maxing")
+	t.Check(Rig.StolenText(k) == "Twin has stolen your Balenciaga", "same class: Twin is named from the meter")
 	w:SetTop("Kain")
 	w:Run(2)
 	w:SetTop("Emu")
 	w:Run(3)
-	t.Check(Rig.StolenText(k) == "Emu has stolen your Balenciaga", "same class: Emu's claim names Emu")
+	t.Check(Rig.StolenText(k) == "Emu has stolen your Balenciaga", "same class: Emu is named from the meter")
 	t.Check(#w.errors == 0, "same class: no Lua errors" .. (w.errors[1] and (": " .. w.errors[1]) or ""))
 end
 
@@ -90,7 +90,7 @@ for _, lockdown in ipairs({ false, true }) do
 	t.Check(#w.errors == 0, label .. ": no Lua errors" .. (w.errors[1] and (": " .. w.errors[1]) or ""))
 end
 
--- 7. A K-Maxing user on an older version never says hello, so isn't named.
+-- 7. A K-Maxing user on an older version never says hello: still named.
 do
 	local w = Rig.NewWorld(CORE)
 	local k = w:AddClient("Kain")
@@ -101,7 +101,7 @@ do
 	w:Run(2)
 	w:SetTop("OldEmu")
 	w:Run(3)
-	t.Check(Rig.StolenText(k) == nil, "unknown user: no banner")
+	t.Check(Rig.StolenText(k) == "OldEmu has stolen your Balenciaga", "older version: OldEmu is named")
 end
 
 t.Finish()
