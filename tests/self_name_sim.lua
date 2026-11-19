@@ -39,5 +39,9 @@ Steal("GUID lookup names Kain, two rogues", { guidNameIsSelf = true }, twoRogues
 Steal("GUID lookup names Kain, readable names", { guidNameIsSelf = true, plainNames = true }, oneEmu, "Emu")
 -- A full meter: the thief is row 1 of five, not the only row.
 Steal("full group on the meter", {}, { Emu = "PRIEST", Rogue = "ROGUE", Tank = "WARRIOR", Hunter = "HUNTER" }, "Rogue")
+-- What /bmdiag showed in game: four on the meter, a rogue at #1, every name,
+-- GUID and amount hidden, dungeon lockdown on. Only the class is readable.
+Steal("as seen in game", { lockdown = function(x) return x.combat end },
+	{ Rogue = "ROGUE", Healer = "PRIEST", Tank = "WARRIOR" }, "Rogue")
 
 t.Finish()

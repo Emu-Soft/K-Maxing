@@ -1590,17 +1590,13 @@ local function RunMeterDiagnostic()
 		DiagPrint("ranking result: top=" .. DiagState(a) .. ", isLocalPlayer=" .. DiagState(b)
 			.. (a == nil and "  (nil = the ranking's internal pcall failed or there were no rows)" or ""))
 	end
-	-- Re-run the comparison loop unprotected-but-caught, to surface the
-	-- error the ranking's own pcall hides.
+	-- Amounts are never compared: in combat they're SECRET, and comparing
+	-- one errors and taints the addon. Just say whether they're readable.
 	if provider then
-		local okCmp, cmpErr = pcall(function()
-			local best = -1
-			for _, entry in provider:Enumerate() do
-				local amount = entry.totalAmount or 0
-				if amount > best then best = amount end
-			end
+		local okAmt, amountState = pcall(function()
+			for _, entry in provider:Enumerate() do return DiagState(entry.totalAmount) end
 		end)
-		DiagPrint("amount comparison: " .. (okCmp and "OK (amounts are comparable)" or ("|cffff5555FAILS:|r " .. tostring(cmpErr))))
+		DiagPrint("amounts: " .. (okAmt and tostring(amountState) or "?"))
 	end
 	DiagPrint("---- end ----")
 end
