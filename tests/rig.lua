@@ -21,6 +21,8 @@
 --   windowShowsSelf  true: the meter window's rows carry the viewer's own
 --                  name and GUID (the "always names me" report)
 --   guidNameIsSelf true: UnitNameFromGUID answers with the viewer's own name
+--   spaceRealm     true: names come as "Name Realm" (a space), the way
+--                  Forever writes them, in messages and on the meter
 --
 -- Group: every client is in the party, plus players added with
 -- world:AddPlayer(name, class) who don't run K-Maxing. Classes default to
@@ -129,7 +131,7 @@ function Rig.NewWorld(corePath, options)
 			if m.at <= world.now + 1e-9 then
 				for _, c in ipairs(world.clients) do
 					if not m.to or m.to == c.name then
-						local sender = m.from .. "-Realm"
+						local sender = m.from .. (opts.spaceRealm and " Realm" or "-Realm")
 						if opts.secretSender then sender = Rig.Secret(sender) end
 						Fire(c, "CHAT_MSG_ADDON", m.prefix, m.msg, m.channel, sender)
 					end
@@ -253,7 +255,7 @@ function Rig.NewWorld(corePath, options)
 		local hidden = (self.combat or opts.secretOutOfCombat) and not opts.plainNames
 		local function Row(c, rank, who, shownAs)
 			-- Party members' names come with their realm; the GUID gives the short name.
-			local shownName, guid = shownAs .. "-Realm", "Player-" .. shownAs
+			local shownName, guid = shownAs .. (opts.spaceRealm and " Realm" or "-Realm"), "Player-" .. shownAs
 			if opts.noNames then
 				shownName, guid = nil, nil
 			elseif hidden then

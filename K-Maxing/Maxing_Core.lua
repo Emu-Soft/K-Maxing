@@ -121,6 +121,20 @@ local function SendComm(message, target)
 	return result ~= false
 end
 
+-- A player's name without the realm. Forever writes other realms' players as
+-- "Name Realm" (with a space) as well as "Name-Realm", so cut at either.
+local function ShortName(fullName)
+	return fullName:match("^[^%- ]+") or fullName
+end
+
+-- Whether a readable name is our own character, in any of those forms. Our
+-- own party messages come back to us, and must never count as someone else.
+local function IsMe(name)
+	if type(name) ~= "string" or (issecretvalue and issecretvalue(name)) then return false end
+	local me = UnitName("player")
+	return me ~= nil and ShortName(name) == ShortName(me)
+end
+
 -- Who in the group runs K-Maxing, and their class: { [name] = "MAGE" }.
 -- Filled out of combat by "USER:<class>" messages, emptied on zoning.
 local kmUsers = {}
@@ -383,25 +397,19 @@ local function GetTopDamagePlayerName()
 	return topEntry.name, isLocal, topEntry.sourceGUID, class
 end
 
--- Whether a readable name is our own character (with or without the realm).
-local function IsOwnName(name)
-	if type(name) ~= "string" or (issecretvalue and issecretvalue(name)) then return false end
-	return (name:match("^[^-]+") or name) == UnitName("player")
-end
-
 -- The name to show for a meter row, without the realm. Like the name itself,
 -- it may be a SECRET string: the game will draw it, but we can't read it.
 -- (UnitNameFromGUID takes the row's GUID even when that is secret too.)
 -- This row is never us, so a readable answer that names us is wrong and
 -- is dropped.
 local function MeterDisplayName(name, guid)
-	if IsOwnName(name) then name = nil end
+	if IsMe(name) then name = nil end
 	if type(name) == "string" and not (issecretvalue and issecretvalue(name)) then
-		return name:match("^[^-]+") or name
+		return ShortName(name)
 	end
 	if guid and UnitNameFromGUID then
 		local ok, shortName = pcall(UnitNameFromGUID, guid)
-		if ok and shortName and not IsOwnName(shortName) then return shortName end
+		if ok and shortName and not IsMe(shortName) then return shortName end
 	end
 	return name
 end
@@ -1117,19 +1125,20 @@ local function OnLostTop(newTopName, newTopClass, pretendUser)
 
 	local unexplained = wasTop and (noName or isUser == "unsure")
 	if unexplained and fakeUserName then pendingFakeClaimAt = GetTime() end
-	local thief
+	local thief, namedBy
 	if isUser == "yes" then
 		-- When one K-Maxing user plays that class, name them from the list:
 		-- a plain name that can't be ours. The meter's name is for two of a kind.
-		thief = (secret and newTopClass and OnlyKMaxingUserOfClass(newTopClass)) or newTopName
+		local listed = secret and newTopClass and OnlyKMaxingUserOfClass(newTopClass)
+		thief, namedBy = listed or newTopName, listed and "K-Maxing user list" or "meter"
 		lastTopClaimName = nil
 	elseif isUser == "unsure" then
-		thief = TakeRecentTopClaimer()
+		thief, namedBy = TakeRecentTopClaimer(), "their claim"
 	end
 	local nameKind = secret and "hidden" or not newTopName and "none" or noName and "missing" or "readable"
 	Debug("lost #1 (was showing: " .. tostring(wasTop) .. "), new #1's name: " .. nameKind
 		.. ", class: " .. tostring(newTopClass or "unknown") .. ", runs K-Maxing: " .. isUser
-		.. ", banner: " .. (thief and "yes" or "no"))
+		.. ", banner: " .. (thief and ("yes, named by " .. namedBy) or "no"))
 	if wasTop and thief then
 		TriggerBalenciagaStolen(thief)
 	else
@@ -1402,23 +1411,16 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 		if issecretvalue and issecretvalue(sender) then return end
 		-- PING/PONG: answered so 1.0.1 clients, which only name K-Maxing users,
 		-- still know we run it.
+		if IsMe(sender) then return end -- our own message, echoed back
+		local senderShort = ShortName(sender)
 		if msg == "PING" then
-			local senderShort = (sender:match("([^-]+)")) or sender
-			if senderShort ~= UnitName("player") then
-				SendComm("PONG")
-				SendComm("USER:" .. (PlayerClass() or "?"))
-			end
+			SendComm("PONG")
+			SendComm("USER:" .. (PlayerClass() or "?"))
 		elseif msg:find("^USER:") then
-			local senderShort = (sender:match("([^-]+)")) or sender
-			if senderShort ~= UnitName("player") then
-				kmUsers[senderShort] = msg:match("^USER:(.+)$")
-			end
+			kmUsers[senderShort] = msg:match("^USER:(.+)$")
 		elseif msg == "TOP" or msg:find("^TOP:") then
-			local senderShort = (sender:match("([^-]+)")) or sender
-			if senderShort ~= UnitName("player") then
-				local ago = tonumber(msg:match("^TOP:([%d.]+)$")) or 0
-				OnTopClaim(senderShort, GetTime() - ago)
-			end
+			local ago = tonumber(msg:match("^TOP:([%d.]+)$")) or 0
+			OnTopClaim(senderShort, GetTime() - ago)
 		end
 	end
 end)

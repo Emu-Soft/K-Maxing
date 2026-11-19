@@ -5,7 +5,7 @@ Newest first. Each version has up to three sections: New, Changed, Fixed. The re
 ## Unreleased
 
 ### Fixed
-- Avada Balenciaga no longer names you as the one who stole your Balenciaga. It reads the game's own ranked damage rows, and when only one K-Maxing user in the group plays the thief's class, it names them from the group's K-Maxing list.
+- Avada Balenciaga no longer names you as the one who stole your Balenciaga. Forever writes names as "Name Realm", so your own K-Maxing messages looked like someone else's and you were counted as a K-Maxing user of your own class. It also reads the game's own ranked damage rows now, and when only one K-Maxing user in the group plays the thief's class, it names them from the group's K-Maxing list.
 
 ## 1.1.0
 

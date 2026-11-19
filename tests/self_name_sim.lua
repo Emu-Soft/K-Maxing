@@ -44,4 +44,42 @@ Steal("full group on the meter", {}, { Emu = "PRIEST", Rogue = "ROGUE", Tank = "
 Steal("as seen in game", { lockdown = function(x) return x.combat end },
 	{ Rogue = "ROGUE", Healer = "PRIEST", Tank = "WARRIOR" }, "Rogue")
 
+-- Forever writes names as "Name Realm", so our own party messages came back
+-- looking like someone else's: we counted ourselves as a K-Maxing user and
+-- took our own "I took #1" claim as the thief's. That named Kain in game.
+local space = { spaceRealm = true }
+local spaceLockdown = { spaceRealm = true, lockdown = function(x) return x.combat end }
+Steal("Name Realm", space, { Rogue = "ROGUE", Healer = "PRIEST" }, "Rogue")
+Steal("Name Realm, lockdown", spaceLockdown, { Rogue = "ROGUE", Healer = "PRIEST" }, "Rogue")
+Steal("Name Realm, readable names", { spaceRealm = true, plainNames = true }, { Rogue = "ROGUE" }, "Rogue")
+Steal("Name Realm, two rogues", space, twoRogues, "RogueB")
+
+-- Kain's own class: a K-Maxing rogue passes a rogue Kain.
+do
+	local w = Rig.NewWorld(CORE, space)
+	local k = w:AddClient("Kain", "ROGUE")
+	w:AddClient("Emu", "ROGUE")
+	w:SetCombat(true)
+	w:SetTop("Kain")
+	w:Run(2)
+	w:SetTop("Emu")
+	w:Run(3)
+	t.Check(Rig.StolenText(k) == "Emu has stolen your Balenciaga", "same class as Kain: Emu is named (got: " .. tostring(Rig.StolenText(k)) .. ")")
+end
+
+-- A rogue without K-Maxing passes a rogue Kain: no banner, and never Kain.
+for _, opts in ipairs({ space, spaceLockdown }) do
+	local w = Rig.NewWorld(CORE, opts)
+	local k = w:AddClient("Kain", "ROGUE")
+	w:AddPlayer("Stranger", "ROGUE")
+	w:SetCombat(true)
+	w:SetTop("Kain")
+	w:Run(2)
+	w:SetTop("Stranger")
+	w:Run(3)
+	local text = Rig.StolenText(k)
+	t.Check(text == nil, "rogue without K-Maxing passes rogue Kain" .. (opts.lockdown and ", lockdown" or "")
+		.. ": no banner (got: " .. tostring(text) .. ")")
+end
+
 t.Finish()

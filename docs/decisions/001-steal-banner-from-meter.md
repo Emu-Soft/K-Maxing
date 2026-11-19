@@ -42,6 +42,12 @@ row and never showed it. The name now comes from:
   readable answer (row name or `UnitNameFromGUID`) that is our own name is
   dropped, since that row is never us.
 
+The cause in game: Forever writes names as "Name Realm" (a space), and
+the self check only cut at "-", so our own party messages (which come back
+to us) counted as another K-Maxing user of our class, and our own "TOP"
+claim as the thief's. Names are now cut at "-" or " " (`ShortName`), and
+every message from us is dropped first (`IsMe`).
+
 `tests/self_name_sim.lua` covers each way the meter could hand back our name.
 
 ## Not chosen
