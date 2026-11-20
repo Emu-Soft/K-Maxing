@@ -5,6 +5,7 @@ Newest first. Each version has up to three sections: New, Changed, Fixed. The re
 ## Unreleased
 
 ### New
+- The timer turns green when the fight ends with you still #1. It still turns red when someone takes #1 from you.
 - Details! support: with Details! installed, K-Maxing follows your open Details window when it shows this fight's Damage Done or DPS. Without Details, or with any other Details view, it reads Forever's own damage meter as before. `/bmdiag` and `/kmax debug` say which one it's reading.
 
 ### Changed

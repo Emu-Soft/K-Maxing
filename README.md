@@ -46,7 +46,7 @@ In a 5-player dungeon, the moment you become the **#1 damage dealer** on Forever
 - **The logo appears** and pulses to the beat, with a glow that strobes through neon colours. The louder the track gets, the bigger and faster it goes.
 - **A timer counts** how long you've been #1, to the thousandth of a second.
 
-Lose the top spot for more than a moment and the timer freezes in red while the music fades out.
+Lose the top spot for more than a moment and the timer freezes in red while the music fades out. Still #1 when the fight ends? It freezes in green instead.
 
 **Avada Balenciaga:** when anyone takes #1 from you, you'll see *"<name> has stolen your Balenciaga"*, with a sound to match. Forever's damage meter hides names from addons in combat, but its class column stays readable, so K-Maxing names the one player in your group with that class. With two of the same class, the game draws the meter's own hidden name. So the banner works mid-fight, dungeon lockdown included. If the meter shows no name or class at all, a K-Maxing user who took #1 tells the group themselves; if the game holds that message back until the fight is over, there is no banner.
 

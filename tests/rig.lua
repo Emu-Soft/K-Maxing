@@ -74,9 +74,9 @@ local CLASSES = { "MAGE", "PRIEST", "ROGUE", "WARRIOR", "HUNTER" }
 local SEND_RESULT = { Success = 0, AddonMessageThrottle = 3, AddonMessageLockdown = 11 }
 
 -- One frame stub for everything: any method (capitalised key) works, SetText
--- and SetScript are recorded. Lower-case keys are plain fields, nil until set.
+-- and SetScript are recorded, and SetTextColor is kept on the frame. Lower-case keys are plain fields, nil until set.
 local function NewFrame(log)
-	local f = { scripts = {} }
+	local f = { scripts = {}, children = {} }
 	return setmetatable(f, { __index = function(_, k)
 		if type(k) ~= "string" or not k:find("^%u") then return nil end
 		if k == "SetScript" then return function(self, name, fn) self.scripts[name] = fn end end
@@ -84,9 +84,16 @@ local function NewFrame(log)
 		if k == "SetText" then
 			return function(_, text) log[#log + 1] = IsSecret(text) and rawget(text, "value") or text end
 		end
+		if k == "SetTextColor" then
+			return function(self, r, g, b) rawset(self, "textColor", { r, g, b }) end
+		end
 		if k == "CreateTexture" or k == "CreateFontString" or k == "CreateAnimationGroup"
 			or k == "CreateAnimation" then
-			return function() return NewFrame(log) end
+			return function(self)
+				local child = NewFrame(log)
+				self.children[#self.children + 1] = child
+				return child
+			end
 		end
 		if k == "GetName" then return function(self) return rawget(self, "name") end end
 		if k == "GetFont" then return function() return "Fonts\\FRIZQT__.TTF", 12 end end
@@ -366,6 +373,14 @@ function Rig.StolenText(c)
 	for i = #c.texts, 1, -1 do
 		local t = c.texts[i]
 		if type(t) == "string" and t:find("has stolen your Balenciaga") then return t end
+	end
+end
+
+-- The timer's text colour, { r, g, b }, as last set. The timer text is the
+-- timer frame's last child (its drag label and backdrop come first).
+function Rig.TimerColor(c)
+	for _, f in ipairs(c.frames) do
+		if f.name == "BalenciagaTimerFrame" then return f.children[#f.children].textColor end
 	end
 end
 

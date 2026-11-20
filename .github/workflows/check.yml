@@ -19,5 +19,7 @@ jobs:
         run: lua5.1 tests/self_name_sim.lua K-Maxing/Maxing_Core.lua
       - name: Details! window simulation
         run: lua5.1 tests/details_sim.lua K-Maxing/Maxing_Core.lua
+      - name: Timer colour at fight end
+        run: lua5.1 tests/fight_end_sim.lua K-Maxing/Maxing_Core.lua
       - name: Test commands simulation
         run: lua5.1 tests/commands_sim.lua K-Maxing/Maxing_Core.lua

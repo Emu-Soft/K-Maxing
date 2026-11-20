@@ -5,7 +5,7 @@ Watches the damage meter (the open Details! window when Details is loaded,
 else Forever's built-in C_DamageMeter / DamageMeterSessionWindow1) for the
 moment the player becomes the #1 damage dealer in combat. While #1: plays
 music, pulses logo to track loudness, and updates a timer. On loss: smooth 2s audio 
-and red timer fadeout.
+and red timer fadeout. Still #1 when the fight ends: the same fadeout, in green.
 
 Includes "Avada Balenciaga": whoever takes #1 from you is named on a banner,
 straight from the meter (a SECRET name in combat, which the game still
@@ -1136,22 +1136,34 @@ local function OnBecameTop()
 	end
 end
 
--- newTopClass: the new #1's class from the meter, if readable.
-local function OnLostTop(newTopName, newTopClass)
-	local wasTop = isCurrentlyTop
+-- Stops the #1 display: freezes the timer in the given colour, hides the logo.
+local function StopMaxing(r, g, b)
 	isCurrentlyTop = false
 
 	if topSince and not frozenTime then
 		frozenTime = GetTime() - topSince
 	end
 	topSince = nil
-	timerText:SetTextColor(1.0, 0.2, 0.2)
+	timerText:SetTextColor(r, g, b)
 
 	if not isUnlocked then
 		logoFrame:Hide()
 	end
 	headline:SetScale(1)
 	glowTexture:SetVertexColor(1, 1, 1, 0.8)
+end
+
+-- The fight ended with us still #1: the timer freezes green and fades out.
+local function OnFightEndedTop()
+	Debug("fight over while you held #1")
+	StopMaxing(0.2, 1.0, 0.2)
+	StartFadeOut(FADE_OUT_DURATION)
+end
+
+-- newTopClass: the new #1's class from the meter, if readable.
+local function OnLostTop(newTopName, newTopClass)
+	local wasTop = isCurrentlyTop
+	StopMaxing(1.0, 0.2, 0.2)
 
 	-- Anyone who passes us steals Balenciaga. In combat the meter's name is
 	-- a SECRET string: the banner can show it, but we can't read it. So when
@@ -1428,6 +1440,8 @@ eventsFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sen
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		-- The fight is over: no late banners, and no late claims.
 		if pendingSteal then Debug("fight over before a claim got through; no banner") end
+		-- Still #1 at the last poll: you were maxing when the fight ended.
+		if isCurrentlyTop and wasPollTop then OnFightEndedTop() end
 		simulatedLoss = false
 		pendingSteal, pendingClaimAt, pendingFakeClaimAt = nil, nil, nil
 		combatStartTime = nil
