@@ -1,9 +1,10 @@
 --[[
 BalenciagaMaxing: Core.lua
 
-Watches Forever's built-in DamageMeter (C_DamageMeter / DamageMeterSessionWindow1)
-for the moment the player becomes the #1 damage dealer in combat. While #1: plays music, 
-pulses logo to track loudness, and updates a timer. On loss: smooth 2s audio 
+Watches the damage meter (the open Details! window when Details is loaded,
+else Forever's built-in C_DamageMeter / DamageMeterSessionWindow1) for the
+moment the player becomes the #1 damage dealer in combat. While #1: plays
+music, pulses logo to track loudness, and updates a timer. On loss: smooth 2s audio 
 and red timer fadeout.
 
 Includes "Avada Balenciaga": whoever takes #1 from you is named on a banner,
@@ -357,6 +358,40 @@ local function GetSessionTopSource()
 	return session.combatSources[1]
 end
 
+-- Details! on Forever shows the same game rows, but each of its windows
+-- picks its own fight and view. Many players read Details instead of the
+-- game's meter, so when it's loaded K-Maxing follows the first open Details
+-- window showing this fight's Damage Done or DPS: what they see is what
+-- counts. Any other view (healing, Overall, an older fight) is skipped.
+local DETAILS_DAMAGE, DETAILS_DAMAGE_DONE, DETAILS_DPS = 1, 1, 2
+local DETAILS_CURRENT_FIGHT = 1
+
+local function GetDetailsWindow()
+	local details = _G.Details
+	if type(details) ~= "table" or type(details.GetInstance) ~= "function" then return nil end
+	local ok, window = pcall(function()
+		for id = 1, details:GetNumInstances() do
+			local w = details:GetInstance(id)
+			if w and w.GetSegmentObject and w:IsEnabled() then
+				local display, sub = w:GetDisplay()
+				if display == DETAILS_DAMAGE and (sub == DETAILS_DAMAGE_DONE or sub == DETAILS_DPS)
+					and w:GetSegmentType() == DETAILS_CURRENT_FIGHT then
+					return w
+				end
+			end
+		end
+	end)
+	if ok then return window end
+end
+
+local function GetDetailsTopSource()
+	local window = GetDetailsWindow()
+	if not window then return nil end
+	local ok, session = pcall(window.GetSegmentObject, window)
+	if not ok or type(session) ~= "table" or type(session.combatSources) ~= "table" then return nil end
+	return session.combatSources[1]
+end
+
 -- The meter window's top row: the fallback when the session API is missing.
 local function GetWindowTopEntry()
 	local provider = GetMeterDataProvider()
@@ -390,9 +425,23 @@ end
 -- Returns: topName (may be a SECRET string in combat -- only display it,
 -- never compare/index with it), topIsLocal (true/false, or nil if
 -- unknown), the row's GUID (may be SECRET too) and class (nil if hidden).
+local function GetTopEntry()
+	local top = GetDetailsTopSource()
+	if top then return top, "Details" end
+	top = GetSessionTopSource()
+	if top then return top, "game rows" end
+	top = GetWindowTopEntry()
+	if top then return top, "meter window" end
+end
+
+local lastTopSource
 local function GetTopDamagePlayerName()
-	local topEntry = GetSessionTopSource() or GetWindowTopEntry()
+	local topEntry, source = GetTopEntry()
 	if not topEntry then return nil end
+	if source ~= lastTopSource then
+		lastTopSource = source
+		Debug("reading #1 from " .. source)
+	end
 	local isLocal = topEntry.isLocalPlayer
 	if isLocal ~= nil and issecretvalue and issecretvalue(isLocal) then isLocal = nil end
 	local class = topEntry.classFilename
@@ -1575,6 +1624,17 @@ local function RunMeterDiagnostic()
 		DiagPrint(string.format("session top row: name=%s sourceGUID=%s class=%s isLocalPlayer=%s",
 			DiagState(top.name), DiagState(top.sourceGUID), DiagState(top.classFilename), DiagState(top.isLocalPlayer)))
 	end
+
+	-- 4c. Details!, read before the game's rows when it's loaded.
+	if type(_G.Details) ~= "table" then
+		DiagPrint("Details!: not loaded (reads the game's meter)")
+	elseif GetDetailsWindow() then
+		DiagPrint("Details!: loaded, following its open Damage Done/DPS window on this fight")
+	else
+		DiagPrint("Details!: loaded, but no open window shows this fight's Damage Done or DPS (reads the game's meter)")
+	end
+	local _, source = GetTopEntry()
+	DiagPrint("top row read from: " .. (source or "nothing yet"))
 
 	-- 5. The ranking itself, WITHOUT the swallowing pcall's silence.
 	local okRank, a, b = pcall(GetTopDamagePlayerName)

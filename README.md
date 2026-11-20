@@ -51,7 +51,8 @@ Lose the top spot for more than a moment and the timer freezes in red while the 
 **Avada Balenciaga:** when anyone takes #1 from you, you'll see *"<name> has stolen your Balenciaga"*, with a sound to match. Forever's damage meter hides names from addons in combat, but its class column stays readable, so K-Maxing names the one player in your group with that class. With two of the same class, the game draws the meter's own hidden name. So the banner works mid-fight, dungeon lockdown included. If the meter shows no name or class at all, a K-Maxing user who took #1 tells the group themselves; if the game holds that message back until the fight is over, there is no banner.
 
 ### Good to know
-- It only works **inside 5-player dungeons**, and only reads Forever's own damage meter, so keep that meter turned on.
+- It only works **inside 5-player dungeons**.
+- **Details! users:** with Details! installed, K-Maxing follows your open Details window when it shows this fight's Damage Done or DPS, so the #1 it reacts to is the one you see. Any other Details view (healing, Overall, an older fight) falls back to Forever's own damage meter, as it does without Details.
 - K-Maxing users in your group find each other automatically when you zone in or someone joins. Players on 1.0.1 or older aren't recognised.
 - The soundtrack plays through the game's **Music** channel. If your music is muted, you won't hear it.
 
@@ -62,7 +63,7 @@ Lose the top spot for more than a moment and the timer freezes in red while the 
 | `/kmax` | Open the options. |
 | `/kmax fake <name>` | Testing: pretend `<name>` runs K-Maxing and claims #1 every time you lose it. Only used when the meter gives no name, e.g. with `/kmax lose`. `/kmax fake off` stops it. |
 | `/kmax lose [name]` | Testing: in a dungeon fight while you're #1, pretend someone passed you on the meter, until combat ends. With a name, the banner names them. Without one, the meter seems to give no name, so `/kmax fake <name>` can try the backup path. `/kmax lose off` stops it early. |
-| `/kmax debug` | Print each step of working out who took #1 (lost #1, sends, claims). Type it again to turn it off. |
+| `/kmax debug` | Print each step of working out who took #1 (which meter it reads, lost #1, sends, claims). Type it again to turn it off. |
 | `/bmdiag` | Print what K-Maxing can see of the damage meter. Handy when it isn't triggering: run it mid-fight in a dungeon. |
 
 ## Options (`/kmax`)

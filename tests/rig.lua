@@ -23,6 +23,11 @@
 --   guidNameIsSelf true: UnitNameFromGUID answers with the viewer's own name
 --   spaceRealm     true: names come as "Name Realm" (a space), the way
 --                  Forever writes them, in messages and on the meter
+--   details        a Details! window: { display = 1, sub = 1, segment = 1,
+--                  enabled = true, broken = false } (those are the defaults:
+--                  Damage Done on this fight, open). Its rows follow
+--                  world:SetDetailsTop(name), else they're the game's rows.
+--                  broken = true: reading the window errors.
 --
 -- Group: every client is in the party, plus players added with
 -- world:AddPlayer(name, class) who don't run K-Maxing. Classes default to
@@ -220,6 +225,22 @@ function Rig.NewWorld(corePath, options)
 				return { combatSources = c.rows }
 			end
 		end
+		if opts.details then
+			local d = opts.details
+			local window = {
+				IsEnabled = function() return d.enabled ~= false end,
+				GetDisplay = function() return d.display or 1, d.sub or 1 end,
+				GetSegmentType = function() return d.segment or 1 end,
+				GetSegmentObject = function()
+					if d.broken then error("Details window broke") end
+					return { combatSources = c.detailsRows or c.rows }
+				end,
+			}
+			env.Details = {
+				GetNumInstances = function() return 1 end,
+				GetInstance = function(_, id) return id == 1 and window or nil end,
+			}
+		end
 		local provider = { Enumerate = function() return ipairs(c.windowRows or c.rows) end }
 		local scrollBox = {
 			HasDataProvider = function() return true end,
@@ -252,12 +273,17 @@ function Rig.NewWorld(corePath, options)
 	-- Every client's meter shows `topName` at #1, then the rest of the group.
 	-- Names are secret in combat (and out of it with secretOutOfCombat); each
 	-- client sees only which row is itself.
-	function world:SetTop(topName)
-		self.top = topName
+	local function Order(topName)
 		local order = { topName }
-		for _, other in ipairs(self.party) do
+		for _, other in ipairs(world.party) do
 			if other ~= topName then order[#order + 1] = other end
 		end
+		return order
+	end
+
+	function world:SetTop(topName)
+		self.top = topName
+		local order = Order(topName)
 		local hidden = (self.combat or opts.secretOutOfCombat) and not opts.plainNames
 		local function Row(c, rank, who, shownAs)
 			-- Party members' names come with their realm; the GUID gives the short name.
@@ -282,7 +308,19 @@ function Rig.NewWorld(corePath, options)
 				c.rows[rank] = Row(c, rank, who, who)
 				if c.windowRows then c.windowRows[rank] = Row(c, rank, who, c.name) end
 			end
+			c.detailsRows = nil
+			if self.detailsTop then
+				c.detailsRows = {}
+				for rank, who in ipairs(Order(self.detailsTop)) do c.detailsRows[rank] = Row(c, rank, who, who) end
+			end
 		end
+	end
+
+	-- The Details! window ranks `topName` first (the game's rows stay as
+	-- they are). nil: it shows the game's rows again.
+	function world:SetDetailsTop(topName)
+		self.detailsTop = topName
+		if self.top then self:SetTop(self.top) end
 	end
 
 	function world:SetCombat(on)

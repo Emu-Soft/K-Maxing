@@ -4,6 +4,9 @@ Newest first. Each version has up to three sections: New, Changed, Fixed. The re
 
 ## Unreleased
 
+### New
+- Details! support: with Details! installed, K-Maxing follows your open Details window when it shows this fight's Damage Done or DPS. Without Details, or with any other Details view, it reads Forever's own damage meter as before. `/bmdiag` and `/kmax debug` say which one it's reading.
+
 ### Changed
 - Avada Balenciaga names anyone who takes #1 from you, not only K-Maxing users. In combat the name comes from your group list, by the class the meter shows.
 
